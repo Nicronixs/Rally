@@ -831,7 +831,7 @@ async function main() {
     let drive = AUTOPILOT && game.state === 'running' ? autopilot() : inp;
     if (game.state === 'intro') drive = { throttle: 0, brake: 0, steer: inp.steer, handbrake: true };
     // at the start line the brakes hold the car until you press the throttle: going before "LOS!" is a jump start
-    if (game.state === 'countdown') drive = { throttle: inp.throttle, brake: inp.throttle > 0.05 ? 0 : 1, steer: inp.steer, handbrake: false };
+    if (game.state === 'countdown') drive = { throttle: inp.throttle, brake: 0, hold: inp.throttle <= 0.05, steer: inp.steer, handbrake: false };
     if (game.state === 'finished') drive = { throttle: 0, brake: 0.6, steer: 0, handbrake: false };
 
     if (isCo) {

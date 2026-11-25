@@ -244,7 +244,8 @@ export class Vehicle {
     let pedal = input.throttle, braking = input.brake;
     if (!this.manual) {
       if (this.gear === 0) this.gear = 1;
-      if (this.gear > 0 && abs < 1 && input.brake > 0 && input.throttle === 0) this.gear = -1;
+      // brake at a standstill = reverse, but not while the car is held at the start line
+      if (this.gear > 0 && abs < 1 && input.brake > 0 && input.throttle === 0 && !input.hold) this.gear = -1;
       else if (this.gear < 0 && input.throttle > 0 && speed > -1) this.gear = 1;
       if (this.gear < 0) { pedal = input.brake; braking = input.throttle; }
       if (this.gear > 0 && this.shiftTimer <= 0 && !this.airborne) {
@@ -274,6 +275,7 @@ export class Vehicle {
     }
     this.driveForce = drive;
     if (braking > 0) brake = T.brakeImpulse * braking;
+    if (input.hold) brake = T.brakeImpulse; // start line: brakes on until the throttle is pressed
     // engine braking grows with rpm when the throttle is closed
     if (drive === 0 && brake === 0) brake = this.gear === 0 ? 1 : T.engineBrake * (0.4 + (1.6 * engineRpm) / T.redline);
 
