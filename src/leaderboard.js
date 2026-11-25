@@ -3,7 +3,8 @@
 // the table's row-level security in supabase/weekly.sql decides what it may do).
 import { ENVIRONMENTS } from './environments.js';
 
-const URL_BASE = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+// accept the project URL with or without the "/rest/v1/" that Supabase shows next to its Data API
+const URL_BASE = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 export const leaderboardReady = !!(URL_BASE && ANON_KEY);
 
