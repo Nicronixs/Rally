@@ -1,6 +1,9 @@
 // Co-driver notebook panel and spoken calls.
 // In the coming co-op mode this panel moves to the co-driver's device.
 import { noteText, nextText } from './pacenotes.js';
+import { CodriverVoice, noteClips, distanceClip } from './codriverVoice.js';
+
+let recorded = null; // shared across stages (loaded once)
 
 const TURN_DEG = { H: 180, 1: 135, 2: 110, 3: 90, 4: 65, 5: 45, 6: 25 };
 
@@ -45,6 +48,8 @@ export class PacenoteUI {
     this.bookOn = localStorage.getItem('rally.book') !== '0';
     this.voiceOn = localStorage.getItem('rally.voice') !== '0';
     this.voice = null;
+    recorded = recorded || new CodriverVoice();
+    this.rec = recorded;
     this.role = 'solo';
     this.visibleRows = 6;
     this.distEl = document.getElementById('notebook-dist');
@@ -83,7 +88,7 @@ export class PacenoteUI {
       window.addEventListener('resize', fit);
       fit();
     }
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    this.silence();
     this.applyVisibility();
     this.render();
   }
@@ -102,7 +107,7 @@ export class PacenoteUI {
   toggleVoice() {
     this.voiceOn = !this.voiceOn;
     if (this.role === 'solo') localStorage.setItem('rally.voice', this.voiceOn ? '1' : '0');
-    if (!this.voiceOn && 'speechSynthesis' in window) speechSynthesis.cancel();
+    if (!this.voiceOn) this.silence();
     this.applyVisibility();
   }
 
@@ -112,12 +117,20 @@ export class PacenoteUI {
     while (k < this.notes.length - 1 && this.notes[k].end < trackIndex) k++;
     this.current = k;
     this.called = k;
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    this.silence();
     this.render();
   }
 
-  speak(text) {
-    if (!this.voiceOn || !('speechSynthesis' in window)) return;
+  silence() {
+    this.rec.stop();
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+  }
+
+  // recorded voice when every clip exists, otherwise the browser's speech synthesis
+  speak(text, clips) {
+    if (!this.voiceOn) return;
+    if (clips && this.rec.play(clips)) return;
+    if (!('speechSynthesis' in window)) return;
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'de-DE';
     if (this.voice) u.voice = this.voice;
@@ -135,19 +148,20 @@ export class PacenoteUI {
       const lead = Math.max(55, Math.abs(speed) * 3.2);
       if (this.called < notes.length && notes[this.called].index - trackIndex < lead) {
         // speak this note and every note linked to it with "in"
-        const parts = [];
+        const parts = [], clips = [];
         let k = this.called;
         while (k < notes.length) {
           const n = notes[k];
           let s = noteText(n).spoken;
-          if (n.next === 'in' && k + 1 < notes.length) { parts.push(`${s} in`); k++; continue; }
-          if (typeof n.next === 'number' && n.next >= 100) s += `, ${n.next}`;
+          clips.push(...noteClips(n));
+          if (n.next === 'in' && k + 1 < notes.length) { parts.push(`${s} in`); clips.push('in'); k++; continue; }
+          if (typeof n.next === 'number' && n.next >= 100) { s += `, ${n.next}`; clips.push(distanceClip(n.next)); }
           parts.push(s);
           k++;
           break;
         }
         this.called = Math.max(k, this.current);
-        this.speak(parts.join(' '));
+        this.speak(parts.join(' '), clips);
         changed = true;
       }
     }

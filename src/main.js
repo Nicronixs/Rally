@@ -18,7 +18,7 @@ import { getCar, weeklyCar, CARS } from './cars.js';
 import {
   loadProfile, ownsCar, START_CAR, tunedOverrides, liveryColors, selectedLivery, addMoney, formatMoney,
   RALLY_PRIZES, CHAMPION_PRIZES, buyCar, buyUpgrade, buyLivery, selectLivery,
-  CAR_PRICES, UPGRADES, LIVERIES, upgradeLevel, ownsLivery,
+  CAR_PRICES, UPGRADES, LIVERIES, upgradeLevel, ownsLivery, saveProfile,
 } from './profile.js';
 import { leaderboardReady, isoWeek, weeklyStage, fetchWeekly, submitWeekly, NAME_KEY } from './leaderboard.js';
 import {
@@ -60,6 +60,11 @@ if (weeklyActive) {
 }
 // garage: outside the stage of the week only cars you own can be driven (a running championship keeps its car)
 const PROFILE = loadProfile();
+// local testing only (not in the published build): ?devmoney=999999 sets the prize money
+if (import.meta.env.DEV && params.has('devmoney')) {
+  PROFILE.money = Number(params.get('devmoney')) || 0;
+  saveProfile(PROFILE);
+}
 if (!weeklyActive && !JOIN && !champActive && !ownsCar(PROFILE, CAR.id)) CAR = getCar(PROFILE.cars.includes(START_CAR) ? START_CAR : PROFILE.cars[0]);
 const STOCK = weeklyActive || !!JOIN; // stage of the week: stock cars for a fair leaderboard; co-driver: no physics anyway
 const LIVERY_ID = JOIN ? (params.get('liv') || 'werk') : selectedLivery(PROFILE, CAR.id);
