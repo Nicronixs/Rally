@@ -19,7 +19,13 @@ Direkt per Adresse: `?seed=123&env=snow&car=bison&go=1` (Strecke, Untergrund `fo
 
 4 Rallyes (Nordwald/Schotter, Schneeland/Schnee, Alpenpass/Asphalt, Sandmeer/Wüste) mit je 3 Wertungsprüfungen gegen 7 fiktive Gegner. Nach jeder Rallye gibt es Punkte (25-18-15-12-10-8-6-4-2-1). Repariert wird nur zwischen den Rallyes: nach der letzten Prüfung einer Rallye gibt es 45 Minuten Service für Motor, Fahrwerk und Karosserie – was nicht repariert wird, bleibt. Zwischen den Prüfungen einer Rallye fährt man mit dem Schaden weiter. Kein Neustart; R (Bergung) kostet 5 s.
 
-**Zeitstrafe neben der Strecke** (Meisterschaft und freie Fahrt): Wer mehr als 4 m über den Straßenrand hinaus fährt (hinter Graben bzw. Schneewall), bekommt nach 1 Sekunde Kulanz für jede weitere Sekunde 2 Sekunden Strafe. Die Strafe steht rot unter der Zeit und zählt zur Etappenzeit. Einstellbar in `src/championship.js` (`OFF_TRACK_MARGIN`, `OFF_TRACK_GRACE`, `OFF_TRACK_RATE`). Der Fortschritt wird im Browser gespeichert.
+**Strafen wie bei einer echten Rallye** (nach den FIA WRC Sporting Regulations):
+- **Frühstart** (Art. 48.6): Wer vor „LOS!“ losfährt – am Start halten die Bremsen das Auto, bis man Gas gibt –, bekommt 10 s, beim zweiten Mal 1 min, ab dem dritten Mal 3 min (in der Meisterschaft über alle Prüfungen gezählt).
+- **Abkürzen** (Art. 19.2): Von der Straße abkommen und wieder auffahren kostet nur Zeit. Wer aber weiter vorne wieder auf die Straße kommt, als er sie verlassen hat, und dabei mehr als 12 m spart, bekommt +5 s, jedes weitere Mal +10 s – mindestens aber das 1,5-Fache der gesparten Zeit, damit sich Abkürzen nie lohnt.
+- **Aufgeben** (Art. 54, nur Meisterschaft): Esc während einer Prüfung → die Prüfung zählt mit der Bestzeit + 10 Minuten, die Rallye geht weiter.
+- **Bergung** mit R: +5 s (Meisterschaft).
+
+Einstellbar in `src/championship.js` (`CUT_*`, `JUMP_START_PENALTIES`, `RETIRE_PENALTY`).
 
 **Schaden:** Harte Treffer (Bäume, Felsen, Überschläge) beschädigen das Auto. Frontal trifft vor allem den Motor (weniger Leistung, ab 45 % raucht er), seitlich das Fahrwerk (weniger Grip, zieht zur Seite), alles die Karosserie (dreckig, Heckflügel fällt ab).
 

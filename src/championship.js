@@ -11,10 +11,17 @@ export const STAGES_PER_RALLY = 3;
 export const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 export const SERVICE_MINUTES = 45; // service only between rallies
 export const RESET_PENALTY = 5; // seconds for "R" (recovery) in the championship
-// driving too far off the road: beyond the ditch, after a short grace time, every second costs extra
-export const OFF_TRACK_MARGIN = 4; // metres beyond the road edge
-export const OFF_TRACK_GRACE = 1.0; // seconds that are free
-export const OFF_TRACK_RATE = 2; // penalty seconds per second off the track
+// Penalties modelled on real rally rules (FIA WRC Sporting Regulations):
+// - Leaving the road and driving back costs nothing but time. Rejoining further down the road, i.e. cutting
+//   a corner, is penalised like at Ypres 2022 (+5 s, then +10 s), and never less than the time gained.
+export const OFF_TRACK_MARGIN = 4; // metres beyond the road edge count as "off the route"
+export const CUT_MIN_GAIN = 12; // metres saved before a cut counts
+export const CUT_PENALTIES = [5, 10]; // seconds for the 1st cut of a stage, then for every further one
+export const CUT_REF_SPEED = 18; // m/s used to estimate the time a cut saved
+// - Jump start (Art. 48.6): 10 s, then 1 min, then 3 min (counted over the whole championship)
+export const JUMP_START_PENALTIES = [10, 60, 180];
+// - Retiring from a stage (Art. 54): best time of the stage + 10 minutes, the rally goes on
+export const RETIRE_PENALTY = 600;
 
 // Fictional rivals; skill is a factor on the reference time (lower = faster).
 export const RIVALS = [
@@ -57,6 +64,7 @@ export function newChampionship(carId) {
     damage: { engine: 0, suspension: 0, body: 0 },
     points: {},
     finished: false,
+    jumpStarts: 0, // jump starts over the whole championship (10 s, 1 min, 3 min)
   };
   saveChampionship(c);
   return c;
@@ -91,6 +99,11 @@ function rivalStageTime(c, rally, stage, i, ref) {
   let t = ref * RIVALS[i].skill * (1 + (rng() - 0.5) * 0.05);
   if (rng() < 0.08) t += 4 + rng() * 18; // a mistake
   return t;
+}
+
+// Best rival time of the current stage (used for retirements); ref must be the stage's reference time.
+export function bestRivalTime(c, ref) {
+  return Math.min(...RIVALS.map((_, i) => rivalStageTime(c, c.rally, c.stage, i, ref)));
 }
 
 // Results of one stage, sorted, including the player if driven.

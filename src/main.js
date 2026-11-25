@@ -15,7 +15,8 @@ import { hostRoom, joinRoom, normalizeCode, NAT_MESSAGE } from './net.js';
 import { getEnvironment } from './environments.js';
 import { getCar } from './cars.js';
 import {
-  RALLIES, RESET_PENALTY, OFF_TRACK_MARGIN, OFF_TRACK_GRACE, OFF_TRACK_RATE, SERVICE_MINUTES, loadChampionship, saveChampionship, newChampionship,
+  RALLIES, RESET_PENALTY, OFF_TRACK_MARGIN, CUT_MIN_GAIN, CUT_PENALTIES, CUT_REF_SPEED, JUMP_START_PENALTIES,
+  RETIRE_PENALTY, bestRivalTime, SERVICE_MINUTES, loadChampionship, saveChampionship, newChampionship,
   stageSeed, referenceTime, recordStage, repairCost,
 } from './championship.js';
 import {
@@ -133,8 +134,14 @@ async function main() {
     state: 'intro', // intro, countdown, running, finished
     time: 0,
     penalty: 0,
-    offTime: 0, // continuous seconds off the track
-    offPenalty: 0, // penalty seconds from driving off the track
+    off: false, // beyond the road edge margin right now
+    exitIndex: 0, // where the car left the road
+    offPath: 0, // metres driven while off the road
+    offLast: null,
+    cuts: 0, // corner cuts penalised on this stage
+    jumped: false, // jump start already penalised on this stage
+    startPos: null,
+    jumpStarts: 0, // free drive: jump starts this session (championship keeps its own count)
     countdown: 0,
     trackIndex: stage.startIndex,
     splits: [],
@@ -154,6 +161,7 @@ async function main() {
     snapshot();
     copySnapshot();
     notebook.sync(i);
+    game.off = false; // a recovery never counts as rejoining after a cut
   }
 
   let fullscreenHintShown = false;
@@ -167,8 +175,10 @@ async function main() {
     game.countdown = 3.5;
     game.time = 0;
     game.penalty = 0;
-    game.offTime = 0;
-    game.offPenalty = 0;
+    game.cuts = 0;
+    game.jumped = false;
+    const sp0 = vehicle.body.translation();
+    game.startPos = { x: sp0.x, z: sp0.z };
     game.splits = [];
     if (MODE === 'free') vehicle.setDamage({});
     car.setDamage(vehicle.damage);
@@ -176,6 +186,19 @@ async function main() {
     hideOverlay();
     $('hud').classList.remove('hidden');
     if (link) link.send({ t: 'restart' });
+  }
+
+  // Retiring from a championship stage: like Art. 54 the stage counts with its best time + 10 minutes.
+  function retire() {
+    game.state = 'finished';
+    $('message').textContent = 'AUFGEGEBEN';
+    const rally = CHAMP.rally, stg = CHAMP.stage;
+    const ref = referenceTime(stage, ENV);
+    const t = bestRivalTime(CHAMP, ref) + RETIRE_PENALTY;
+    const { rallyDone } = recordStage(CHAMP, t, ref, vehicle.damage);
+    const res = champResultScreen(CHAMP, rally, stg, rallyDone, 0, 'Aufgegeben – Bestzeit + 10 Minuten');
+    if (link) link.send({ t: 'finish', time: t, line: 'Aufgegeben – Bestzeit + 10 Minuten' });
+    setTimeout(() => showChampResult(res.html, rallyDone), 1200);
   }
 
   function finish() {
@@ -796,7 +819,9 @@ async function main() {
     if (inp.actions.has('KeyN') && MODE === 'free' && !isCo && !overlayOpen) { go(freeQuery(Math.floor(Math.random() * 99999) + 1, ENV.id, CAR.id, true)); return; }
     // in fullscreen the browser wants Esc held to leave it, so Esc does not open the menu there
     if (inp.actions.has('Escape') && !document.fullscreenElement && !isCo && game.state !== 'intro') {
-      if (MODE === 'champ' && game.state === 'running' && !confirm('Prüfung abbrechen? Der Fortschritt dieser Prüfung geht verloren.')) { /* stay */ } else go('');
+      if (MODE === 'champ' && (game.state === 'running' || game.state === 'countdown')) {
+        if (confirm('Prüfung aufgeben? Wie bei einer echten Rallye bekommst du die Bestzeit dieser Prüfung plus 10 Minuten – die Rallye geht weiter.')) retire();
+      } else go('');
     }
     if (!isCo && inp.actions.has('KeyR') && (game.state === 'running' || game.state === 'countdown')) {
       placeAtIndex(Math.max(stage.startIndex - 4, game.trackIndex - 3));
@@ -804,7 +829,9 @@ async function main() {
     }
 
     let drive = AUTOPILOT && game.state === 'running' ? autopilot() : inp;
-    if (game.state === 'intro' || game.state === 'countdown') drive = { throttle: 0, brake: 0, steer: inp.steer, handbrake: true };
+    if (game.state === 'intro') drive = { throttle: 0, brake: 0, steer: inp.steer, handbrake: true };
+    // at the start line the brakes hold the car until you press the throttle: going before "LOS!" is a jump start
+    if (game.state === 'countdown') drive = { throttle: inp.throttle, brake: inp.throttle > 0.05 ? 0 : 1, steer: inp.steer, handbrake: false };
     if (game.state === 'finished') drive = { throttle: 0, brake: 0.6, steer: 0, handbrake: false };
 
     if (isCo) {
@@ -834,6 +861,15 @@ async function main() {
       updateCodriverMessages();
     } else if (game.state === 'countdown') {
       game.countdown -= dt;
+      // jump start (Art. 48.6): 10 s, then 1 min, then 3 min
+      if (!game.jumped && game.startPos && Math.hypot(p.x - game.startPos.x, p.z - game.startPos.z) > 0.6) {
+        game.jumped = true;
+        const n = MODE === 'champ' ? (CHAMP.jumpStarts = (CHAMP.jumpStarts || 0) + 1) : ++game.jumpStarts;
+        if (MODE === 'champ') saveChampionship(CHAMP);
+        const pen = JUMP_START_PENALTIES[Math.min(n, JUMP_START_PENALTIES.length) - 1];
+        game.penalty += pen;
+        toast(`FRÜHSTART +${pen >= 60 ? `${pen / 60} min` : `${pen} s`}`, 3);
+      }
       const n = Math.ceil(game.countdown);
       $('message').textContent = n > 3 ? '' : n > 0 ? String(n) : '';
       if (game.countdown <= 0) {
@@ -852,14 +888,28 @@ async function main() {
         $('message').textContent = 'ZIEL!';
         finish();
       }
-      // off-track penalty
-      if (distFromRoad > stage.halfWidth + OFF_TRACK_MARGIN) {
-        game.offTime += dt;
-        if (game.offTime > OFF_TRACK_GRACE) {
-          game.penalty += OFF_TRACK_RATE * dt;
-          game.offPenalty += OFF_TRACK_RATE * dt;
+      // leaving the route is free, cutting it is not: compare the road skipped with the distance driven off it
+      if (!game.off && distFromRoad > stage.halfWidth + OFF_TRACK_MARGIN) {
+        game.off = true;
+        game.exitIndex = game.lastOnRoad ?? ti;
+        game.offPath = 0;
+        game.offLast = { x: p.x, z: p.z };
+      } else if (game.off) {
+        game.offPath += Math.hypot(p.x - game.offLast.x, p.z - game.offLast.z);
+        game.offLast = { x: p.x, z: p.z };
+        if (distFromRoad < stage.halfWidth + 1.5) {
+          game.off = false;
+          const gain = (ti - game.exitIndex) - game.offPath;
+          if (gain > CUT_MIN_GAIN) {
+            const step = CUT_PENALTIES[Math.min(game.cuts, CUT_PENALTIES.length - 1)];
+            const pen = Math.max(step, Math.ceil((gain / CUT_REF_SPEED) * 1.5));
+            game.cuts++;
+            game.penalty += pen;
+            toast(`Abgekürzt (${Math.round(gain)} m) +${pen} s`, 2.5);
+          }
         }
-      } else game.offTime = 0;
+      }
+      if (!game.off && distFromRoad < stage.halfWidth + 1.5) game.lastOnRoad = ti;
     }
 
     notebook.update(ti, vehicle.speed, game.state === 'running');
@@ -875,8 +925,7 @@ async function main() {
     if (game.state === 'running' && !isCo) {
       if (game.flipTimer > 0.6) hint = 'Überschlagen – gleich geht’s weiter';
       else if (distFromRoad > 35) hint = MODE === 'champ' ? `Weit weg von der Strecke – R drücken (+${RESET_PENALTY} s)` : 'Weit weg von der Strecke – R drücken';
-      else if (game.offTime > OFF_TRACK_GRACE) hint = `Neben der Strecke – Strafe läuft (+${OFF_TRACK_RATE} s pro Sekunde)`;
-      else if (game.offTime > 0) hint = 'Zurück auf die Strecke!';
+      else if (game.off) hint = 'Abseits der Route – dort wieder auf die Straße, wo du sie verlassen hast';
     }
     const pen = isCo ? 0 : game.penalty;
     $('penalty').textContent = pen > 0.05 ? `Strafe +${pen.toFixed(1).replace('.', ',')} s` : '';

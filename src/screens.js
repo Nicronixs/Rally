@@ -104,7 +104,7 @@ export function champIntroScreen(champ, carName, envName, stageKm) {
   <p class="sub">Wertungsprüfung ${champ.stage + 1} von ${STAGES_PER_RALLY} · ${esc(envName)} · ${stageKm} km · ${esc(carName)}</p>
   ${champ.stage > 0 ? standingsTable(rallyStandings(champ, champ.rally), 'Zwischenstand Rallye', true) : ''}
   ${hurt ? `<div class="label">Zustand des Autos</div>${damageBars(d)}` : ''}
-  <p class="small">${champ.stage > 0 ? 'Kein Service bis zum Ende der Rallye. ' : ''}R = Bergung zurück auf die Strecke (+5 s Strafe). Kein Neustart in der Meisterschaft.</p>
+  <p class="small">${champ.stage > 0 ? 'Kein Service bis zum Ende der Rallye. ' : ''}Strafen wie bei einer echten Rallye: Frühstart 10 s / 1 min / 3 min · Abkürzen +5 s, danach +10 s · R = Bergung +5 s. Kein Neustart; Esc = aufgeben (Bestzeit der Prüfung + 10 Minuten).</p>
   <button class="btn primary" id="c-go">Etappe starten <span class="small">(Enter)</span></button>
   <button class="btn ghost" id="c-menu">Hauptmenü</button>`;
 }
@@ -121,12 +121,12 @@ function pointsTable(rows) {
 }
 
 // After a championship stage
-export function champResultScreen(champ, rally, stage, rallyDone, penalty) {
+export function champResultScreen(champ, rally, stage, rallyDone, penalty, note = '') {
   const sr = stageResults(champ, rally, stage);
   const pos = sr.findIndex((r) => r.player) + 1;
   const r = RALLIES[rally];
   let html = `<div class="champ-head">${r.icon} ${esc(r.name)} · WP ${stage + 1}</div>
-    <p class="sub">Platz ${pos} von ${sr.length}${penalty ? ` · inkl. ${penalty} s Strafe` : ''}</p>
+    <p class="sub">${note ? `${esc(note)} · ` : ''}Platz ${pos} von ${sr.length}${penalty ? ` · inkl. ${penalty.toFixed(1).replace('.', ',')} s Strafe` : ''}</p>
     <div class="two-col"><div>${standingsTable(sr, 'Wertungsprüfung', true)}</div>
     <div>${standingsTable(rallyStandings(champ, rally), rallyDone ? 'Endstand Rallye' : 'Gesamt Rallye', true)}</div></div>`;
   if (rallyDone) html += pointsTable(championshipStandings(champ));
