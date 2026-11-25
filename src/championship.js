@@ -22,6 +22,9 @@ export const CUT_REF_SPEED = 18; // m/s used to estimate the time a cut saved
 export const JUMP_START_PENALTIES = [10, 60, 180];
 // - Retiring from a stage (Art. 54): best time of the stage + 10 minutes, the rally goes on
 export const RETIRE_PENALTY = 600;
+// - Off the route for too long: the car is put back on the road where it left it, like a recovery
+export const OFF_RESET_TIME = 5; // seconds off the route before the car is put back
+export const OFF_RESET_PENALTY = 5; // seconds added for it
 
 // Fictional rivals; skill is a factor on the reference time (lower = faster).
 export const RIVALS = [

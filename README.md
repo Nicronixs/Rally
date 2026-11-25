@@ -22,6 +22,7 @@ Direkt per Adresse: `?seed=123&env=snow&car=bison&go=1` (Strecke, Untergrund `fo
 **Strafen wie bei einer echten Rallye** (nach den FIA WRC Sporting Regulations):
 - **Frühstart** (Art. 48.6): Wer vor „LOS!“ losfährt – am Start halten die Bremsen das Auto, bis man Gas gibt –, bekommt 10 s, beim zweiten Mal 1 min, ab dem dritten Mal 3 min (in der Meisterschaft über alle Prüfungen gezählt).
 - **Abkürzen** (Art. 19.2): Von der Straße abkommen und wieder auffahren kostet nur Zeit. Wer aber weiter vorne wieder auf die Straße kommt, als er sie verlassen hat, und dabei mehr als 12 m spart, bekommt +5 s, jedes weitere Mal +10 s – mindestens aber das 1,5-Fache der gesparten Zeit, damit sich Abkürzen nie lohnt.
+- **Zu lange neben der Strecke:** Wer 5 Sekunden abseits der Route ist (mehr als 4 m über den Straßenrand hinaus), wird dort auf die Straße zurückgesetzt, wo er sie verlassen hat, und bekommt +5 s. Ein Countdown im Hinweis zeigt die verbleibende Zeit. Einstellbar mit `OFF_RESET_TIME` und `OFF_RESET_PENALTY`.
 - **Aufgeben** (Art. 54, nur Meisterschaft): Esc während einer Prüfung → die Prüfung zählt mit der Bestzeit + 10 Minuten, die Rallye geht weiter.
 - **Bergung** mit R: +5 s (Meisterschaft).
 

@@ -16,7 +16,7 @@ import { getEnvironment } from './environments.js';
 import { getCar } from './cars.js';
 import {
   RALLIES, RESET_PENALTY, OFF_TRACK_MARGIN, CUT_MIN_GAIN, CUT_PENALTIES, CUT_REF_SPEED, JUMP_START_PENALTIES,
-  RETIRE_PENALTY, bestRivalTime, SERVICE_MINUTES, loadChampionship, saveChampionship, newChampionship,
+  RETIRE_PENALTY, OFF_RESET_TIME, OFF_RESET_PENALTY, bestRivalTime, SERVICE_MINUTES, loadChampionship, saveChampionship, newChampionship,
   stageSeed, referenceTime, recordStage, repairCost,
 } from './championship.js';
 import {
@@ -893,11 +893,18 @@ async function main() {
         game.off = true;
         game.exitIndex = game.lastOnRoad ?? ti;
         game.offPath = 0;
+        game.offTime = 0;
         game.offLast = { x: p.x, z: p.z };
       } else if (game.off) {
         game.offPath += Math.hypot(p.x - game.offLast.x, p.z - game.offLast.z);
         game.offLast = { x: p.x, z: p.z };
-        if (distFromRoad < stage.halfWidth + 1.5) {
+        game.offTime += dt;
+        if (game.offTime > OFF_RESET_TIME) {
+          // too long off the route: back onto the road where the car left it
+          placeAtIndex(Math.max(stage.startIndex - 4, game.exitIndex - 3));
+          game.penalty += OFF_RESET_PENALTY;
+          toast(`Zurück auf die Strecke gesetzt +${OFF_RESET_PENALTY} s`, 2.5);
+        } else if (distFromRoad < stage.halfWidth + 1.5) {
           game.off = false;
           const gain = (ti - game.exitIndex) - game.offPath;
           if (gain > CUT_MIN_GAIN) {
@@ -924,8 +931,10 @@ async function main() {
     let hint = '';
     if (game.state === 'running' && !isCo) {
       if (game.flipTimer > 0.6) hint = 'Überschlagen – gleich geht’s weiter';
-      else if (distFromRoad > 35) hint = MODE === 'champ' ? `Weit weg von der Strecke – R drücken (+${RESET_PENALTY} s)` : 'Weit weg von der Strecke – R drücken';
-      else if (game.off) hint = 'Abseits der Route – dort wieder auf die Straße, wo du sie verlassen hast';
+      else if (game.off) {
+        const left = Math.max(0, OFF_RESET_TIME - game.offTime).toFixed(1).replace('.', ',');
+        hint = `Abseits der Route – zurück auf die Straße! Sonst Zurücksetzen +${OFF_RESET_PENALTY} s in ${left} s`;
+      }
     }
     const pen = isCo ? 0 : game.penalty;
     $('penalty').textContent = pen > 0.05 ? `Strafe +${pen.toFixed(1).replace('.', ',')} s` : '';

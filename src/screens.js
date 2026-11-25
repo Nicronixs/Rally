@@ -104,7 +104,7 @@ export function champIntroScreen(champ, carName, envName, stageKm) {
   <p class="sub">Wertungsprüfung ${champ.stage + 1} von ${STAGES_PER_RALLY} · ${esc(envName)} · ${stageKm} km · ${esc(carName)}</p>
   ${champ.stage > 0 ? standingsTable(rallyStandings(champ, champ.rally), 'Zwischenstand Rallye', true) : ''}
   ${hurt ? `<div class="label">Zustand des Autos</div>${damageBars(d)}` : ''}
-  <p class="small">${champ.stage > 0 ? 'Kein Service bis zum Ende der Rallye. ' : ''}Strafen wie bei einer echten Rallye: Frühstart 10 s / 1 min / 3 min · Abkürzen +5 s, danach +10 s · R = Bergung +5 s. Kein Neustart; Esc = aufgeben (Bestzeit der Prüfung + 10 Minuten).</p>
+  <p class="small">${champ.stage > 0 ? 'Kein Service bis zum Ende der Rallye. ' : ''}Strafen wie bei einer echten Rallye: Frühstart 10 s / 1 min / 3 min · Abkürzen +5 s, danach +10 s · länger als 5 s neben der Strecke = Zurücksetzen +5 s · R = Bergung +5 s. Kein Neustart; Esc = aufgeben (Bestzeit der Prüfung + 10 Minuten).</p>
   <button class="btn primary" id="c-go">Etappe starten <span class="small">(Enter)</span></button>
   <button class="btn ghost" id="c-menu">Hauptmenü</button>`;
 }
