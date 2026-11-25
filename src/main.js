@@ -392,6 +392,19 @@ async function main() {
   }
 
   function wireCards(root, onPick) {
+    root.querySelectorAll('.cards').forEach((strip) => {
+      // mouse wheel scrolls the car strip sideways while there is room in that direction
+      strip.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+        const max = strip.scrollWidth - strip.clientWidth;
+        if ((e.deltaY > 0 && strip.scrollLeft < max - 1) || (e.deltaY < 0 && strip.scrollLeft > 0)) {
+          e.preventDefault();
+          strip.scrollLeft += e.deltaY;
+        }
+      }, { passive: false });
+      const sel = strip.querySelector('.selected');
+      if (sel) { strip.style.scrollBehavior = 'auto'; strip.scrollLeft = sel.offsetLeft - strip.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2; strip.style.scrollBehavior = ''; }
+    });
     root.querySelectorAll('[data-car]').forEach((el) => {
       el.onclick = () => {
         root.querySelectorAll('[data-car]').forEach((x) => x.classList.toggle('selected', x.dataset.car === el.dataset.car));
