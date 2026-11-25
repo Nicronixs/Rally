@@ -33,7 +33,18 @@ export class CarAudio {
     this.engineFilter.Q.value = 4;
     this.engineGain = ctx.createGain();
     this.engineGain.gain.value = 0.0;
-    this.engineFilter.connect(this.engineGain).connect(this.master);
+    // rev limiter: a 14 Hz square wave chops the engine (ignition cut), only while on the limiter
+    this.limitGate = ctx.createGain();
+    this.limitGate.gain.value = 1;
+    this.limitGate.connect(this.master);
+    this.limitLfo = ctx.createOscillator();
+    this.limitLfo.type = 'square';
+    this.limitLfo.frequency.value = 14;
+    this.limitDepth = ctx.createGain();
+    this.limitDepth.gain.value = 0;
+    this.limitLfo.connect(this.limitDepth).connect(this.limitGate.gain);
+    this.limitLfo.start();
+    this.engineFilter.connect(this.engineGain).connect(this.limitGate);
     this.osc1 = ctx.createOscillator(); this.osc1.type = 'sawtooth';
     this.osc2 = ctx.createOscillator(); this.osc2.type = 'square';
     const g2 = ctx.createGain(); g2.gain.value = 0.35;
@@ -103,6 +114,15 @@ export class CarAudio {
       this.gravelGain.gain.value = 0; // the noise version is no longer needed
     } catch { this.roll = null; }
     try {
+      const buf = await this.loadBuffer('limiter');
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      const g = this.ctx.createGain(); g.gain.value = 0;
+      src.connect(g).connect(this.master);
+      src.start();
+      this.limiterLoop = { src, gain: g };
+    } catch { this.limiterLoop = null; } // optional: the chopped engine alone also works
+    try {
       this.crashBufs = await Promise.all([this.loadBuffer('crash_light', 'hit'), this.loadBuffer('crash_heavy', 'hit')]);
     } catch { this.crashBufs = null; }
     try {
@@ -152,7 +172,7 @@ export class CarAudio {
       this.sampleFilter.frequency.value = 2000;
       this.sampleGain = ctx.createGain();
       this.sampleGain.gain.value = 0;
-      this.sampleFilter.connect(this.sampleGain).connect(this.master);
+      this.sampleFilter.connect(this.sampleGain).connect(this.limitGate);
       this.layers = ENGINE_LAYERS.map((l, i) => {
         const src = ctx.createBufferSource();
         src.buffer = bufs[i];
@@ -221,9 +241,16 @@ export class CarAudio {
     return this.muted;
   }
 
-  update(rpm, throttle, speed, slip, onGravel) {
+  update(rpm, throttle, speed, slip, onGravel, limiter = false) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
+    // limiter: the physics flag flickers (it cuts, revs drop, it releases), so hold it briefly;
+    // the gate then swings between 0.15 and 1 (centre 0.575 +- 0.425)
+    if (limiter) this.limitHold = t + 0.15;
+    limiter = t < (this.limitHold ?? 0);
+    this.limitGate.gain.setTargetAtTime(limiter ? 0.575 : 1, t, 0.01);
+    this.limitDepth.gain.setTargetAtTime(limiter ? 0.425 : 0, t, 0.01);
+    if (this.limiterLoop) this.limiterLoop.gain.gain.setTargetAtTime(limiter ? 0.55 : 0, t, limiter ? 0.02 : 0.06);
     if (this.layers) this.updateSamples(rpm, throttle, t);
     // lifting off the throttle at high revs: sometimes the exhaust pops
     if (this.shiftBufs && (this.lastThrottle ?? 0) > 0.8 && throttle < 0.2 && rpm > 5000 && Math.random() < 0.35) this.pop(0.35, 0.05);

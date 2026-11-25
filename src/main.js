@@ -1236,7 +1236,7 @@ async function main() {
       if (weak > 0.03) input.rumble(offroad ? road * 0.6 : 0, weak, 140);
     }
     const slip = Math.max(...vehicle.wheelSlip);
-    audio.update(vehicle.rpm, isCo ? vehicle.throttle : drive.throttle, vehicle.speed, slip, onGravel);
+    audio.update(vehicle.rpm, isCo ? vehicle.throttle : drive.throttle, vehicle.speed, slip, onGravel, !!vehicle.limiter);
     if (lastGear !== null && vehicle.gear !== lastGear && Math.abs(vehicle.gear - lastGear) === 1 && vehicle.gear > 0 && lastGear > 0) {
       audio.shift(vehicle.gear > lastGear, vehicle.rpm);
     }

@@ -143,6 +143,8 @@ Gangschaltung (ebenfalls ElevenLabs):
 - Während des Schaltvorgangs (0,09 s ohne Antrieb) bricht der Motorsound kurz ein.
 - `pop_a.mp3` und `pop_b.mp3`: Auspuffknallen. Es kommt bei harten Hochschaltungen über 5500 U/min und manchmal beim Gaswegnehmen bei hoher Drehzahl, höchstens einmal alle 1,5 s.
 
+Drehzahlbegrenzer: Am Begrenzer wird der Motorsound 14-mal pro Sekunde zerhackt (Zündunterbrechung, „bap-bap-bap“). Weil der Begrenzer in der Physik ständig ein- und ausschaltet, hält der Sound den Zustand kurz fest. Liegt `public/sounds/limiter.mp3` vor, wird dieser Loop dazugemischt.
+
 Alle Geräusche werden beim Laden auf eine einheitliche Lautstärke gebracht. Stille am Anfang eines Treffers wird übersprungen.
 
 ## Texturen
