@@ -1,10 +1,30 @@
 // HTML for the menu, championship, results and service screens.
-import { CARS, carStats } from './cars.js';
+import { CARS, carStats, WEEKLY_CARS, weeklyCar } from './cars.js';
 import { ENVIRONMENTS, getEnvironment } from './environments.js';
 import { TUNING } from './vehicle.js';
 import {
-  CAR_PRICES, UPGRADES, LIVERIES, formatMoney, ownsCar, upgradeLevel, ownsLivery, selectedLivery, liveryColors,
+  CAR_PRICES, UPGRADES, LIVERIES, formatMoney, ownsCar, upgradeLevel, ownsLivery, selectedLivery, liveryColors, tunedOverrides,
 } from './profile.js';
+import { rateCar, STAT_NAMES } from './ratings.js';
+
+// rating of a car with the player's tuning (profile null = stock); extra = hypothetical upgrade levels
+function ratingFor(profile, carId, extra = null) {
+  let p = profile;
+  if (extra) p = { ...profile, upgrades: { ...profile.upgrades, [carId]: { ...(profile.upgrades[carId] || {}), ...extra } } };
+  return rateCar({ ...TUNING, ...tunedOverrides(p, carId, TUNING) });
+}
+
+export function piBadge(r, big = false) {
+  return `<span class="pi-badge${big ? ' big' : ''}" style="--c:${r.cls.color}"><b>${r.cls.id}</b><span>${r.pi}</span></span>`;
+}
+
+function ratingPanel(r) {
+  const f = r.figures;
+  const bars = Object.entries(STAT_NAMES).map(([k, name]) =>
+    `<div class="st-row"><span>${name}</span><div class="st-bar"><i style="width:${(r.stats[k] * 10).toFixed(0)}%"></i></div><b>${r.stats[k].toFixed(1).replace('.', ',')}</b></div>`).join('');
+  return `<div class="rating">${piBadge(r, true)}<div class="st">${bars}</div></div>
+    <p class="small figures">Spitze ${Math.round(f.vmax)} km/h · 0–100 km/h in ${f.t100.toFixed(1).replace('.', ',')} s · Bremsweg 100–0: ${f.brake.toFixed(1).replace('.', ',')} m · Grip ${f.grip.toFixed(2).replace('.', ',')}</p>`;
+}
 import {
   RALLIES, STAGES_PER_RALLY, SERVICE_MINUTES, PLAYER,
   stageResults, rallyStandings, championshipStandings, repairCost,
@@ -21,14 +41,14 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const hex = (v) => `#${v.toString(16).padStart(6, '0')}`;
 
 // profile given: cars you do not own are locked (bought in the garage)
-export function carCards(selected, profile = null) {
-  return `<div class="cards">${Object.values(CARS).map((c) => {
+export function carCards(selected, profile = null, only = null) {
+  return `<div class="cards">${Object.values(CARS).filter((c) => !only || only.includes(c.id)).map((c) => {
     const s = carStats(c, TUNING);
     const liv = liveryColors(c.id, profile ? selectedLivery(profile, c.id) : 'werk');
     const locked = profile && !ownsCar(profile, c.id);
     return `<button class="card${c.id === selected && !locked ? ' selected' : ''}${locked ? ' locked' : ''}" data-car="${c.id}"${locked ? ' disabled' : ''}>
       <div class="card-swatch" style="background:linear-gradient(90deg, ${hex(liv.color)} 70%, ${hex(liv.stripe)} 70%)"></div>
-      <div class="card-title">${locked ? '🔒 ' : ''}${esc(c.name)}</div>
+      <div class="card-title">${locked ? '🔒 ' : ''}${esc(c.name)} ${piBadge(ratingFor(locked ? null : profile, c.id))}</div>
       <div class="card-sub">${esc(c.drive)} · ${s.power} kW · ${s.mass} kg</div>
       <div class="card-text">${locked ? `In der Garage für ${formatMoney(CAR_PRICES[c.id])} freischalten.` : esc(c.tagline)}</div></button>`;
   }).join('')}</div>`;
@@ -43,17 +63,19 @@ export function garageHtml(p, carId) {
     const liv = liveryColors(c.id, own ? selectedLivery(p, c.id) : 'werk');
     return `<div class="g-car${c.id === carId ? ' active' : ''}">
       <div class="card-swatch" style="background:linear-gradient(90deg, ${hex(liv.color)} 70%, ${hex(liv.stripe)} 70%)"></div>
-      <b>${esc(c.name)}</b><span class="small">${esc(c.drive)}</span>
+      <b>${esc(c.name)} ${piBadge(ratingFor(own ? p : null, c.id))}</b><span class="small">${esc(c.drive)}</span>
       ${own ? `<button class="btn" data-g-car="${c.id}">${c.id === carId ? 'In Bearbeitung' : 'Bearbeiten'}</button>`
         : `<button class="btn primary" data-g-buycar="${c.id}"${p.money < price ? ' disabled' : ''}>Kaufen · ${formatMoney(price)}</button>`}
     </div>`;
   }).join('');
+  const current = ratingFor(p, carId);
   const tuning = Object.entries(UPGRADES).map(([part, u]) => {
     const level = upgradeLevel(p, carId, part);
     const price = u.prices[level];
     const pips = [0, 1, 2].map((i) => `<i class="${i < level ? 'on' : ''}"></i>`).join('');
+    const gain = price === undefined ? 0 : ratingFor(p, carId, { [part]: level + 1 }).pi - current.pi;
     const btn = price === undefined ? '<span class="small">Maximal</span>'
-      : `<button class="btn" data-g-up="${part}"${p.money < price ? ' disabled' : ''}>Stufe ${level + 1} · ${formatMoney(price)}</button>`;
+      : `<button class="btn" data-g-up="${part}"${p.money < price ? ' disabled' : ''}>Stufe ${level + 1} · ${formatMoney(price)} <span class="pi-gain${gain ? '' : ' zero'}">+${gain} PI</span></button>`;
     return `<div class="g-row"><div><b>${u.name}</b><div class="small">${u.text}</div></div><div class="pips">${pips}</div>${btn}</div>`;
   }).join('');
   const sel = selectedLivery(p, carId);
@@ -68,6 +90,7 @@ export function garageHtml(p, carId) {
   return `<div class="wallet big">💰 ${formatMoney(p.money)} <span class="small">· insgesamt verdient ${formatMoney(p.earned || 0)}</span></div>
     <p class="small">Preisgeld gibt es in der Meisterschaft: nach jeder Rallye für die Platzierung, am Ende eine Prämie für den Endstand. Tuning gilt in Meisterschaft und freier Fahrt, nicht bei der Strecke der Woche.</p>
     <div class="label">Autos</div><div class="g-cars">${carRows}</div>
+    <div class="label">Bewertung · ${esc(car.name)}</div>${ratingPanel(current)}
     <div class="label">Tuning · ${esc(car.name)}</div>${tuning}
     <div class="label">Lackierung · ${esc(car.name)}</div><div class="g-livs">${liveries}</div>`;
 }
@@ -218,10 +241,10 @@ const dateDe = (d) => d.toLocaleDateString('de-AT', { day: 'numeric', month: 'nu
 function weeklyPane(weekly, car) {
   const env = getEnvironment(weekly.env);
   const until = new Date(weekly.week.end.getTime() - 86400000);
-  return `<p class="sub">Eine Strecke für alle, jede Woche neu. Du kannst so oft fahren, wie du willst – in der Rangliste zählt deine beste Zeit (inkl. Strafen). Hier fahren alle mit Serienautos: jedes Auto ist verfügbar, Tuning zählt nicht.</p>
+  return `<p class="sub">Eine Strecke für alle, jede Woche neu. Du kannst so oft fahren, wie du willst – in der Rangliste zählt deine beste Zeit (inkl. Strafen). Hier fahren alle mit den drei Basisautos in Serie: jedes davon ist verfügbar, Tuning zählt nicht.</p>
     <div class="weekly-head"><b>${esc(weekly.week.id.replace('-W', ' · KW '))}</b> · ${dateDe(weekly.week.start)}–${dateDe(until)} · ${esc(env.name)} (${esc(env.surfaceName)}) · Strecke #${weekly.seed}</div>
     <div class="label">Auto</div>
-    ${carCards(car)}
+    ${carCards(weeklyCar(car), null, WEEKLY_CARS)}
     <button class="btn primary" id="m-weekly-go">Strecke der Woche fahren</button>
     <div class="label">Rangliste</div>
     <div id="weekly-list" class="weekly-list"><p class="small">Lade …</p></div>`;
@@ -231,9 +254,8 @@ export function weeklyTable(rows, myName) {
   if (!rows.length) return '<p class="small">Noch keine Zeiten diese Woche – sei der Erste!</p>';
   const me = (myName || '').trim().toLowerCase();
   const best = rows[0].time_ms;
-  const carName = { falke: 'Falke R4', fuchs: 'Fuchs R2', bison: 'Bison Klassik' };
   return `<table class="standings">${rows.map((r, i) => `<tr class="${r.name.trim().toLowerCase() === me ? 'me' : ''}">
-    <td>${i + 1}.</td><td>${esc(r.name)}</td><td class="small">${esc(carName[r.car] || r.car)}</td>
+    <td>${i + 1}.</td><td>${esc(r.name)}</td><td class="small">${esc(CARS[r.car] ? CARS[r.car].name : r.car)}</td>
     <td>${formatTime(r.time_ms / 1000)}</td><td>${i ? '+' + ((r.time_ms - best) / 1000).toFixed(2) : ''}</td></tr>`).join('')}</table>`;
 }
 

@@ -98,8 +98,8 @@ body.codriver #speedo { transform: scale(0.8); transform-origin: bottom right; }
 .tab { font: inherit; font-weight: 700; color: #cfd7e3; background: transparent; border: 1px solid #44536a; border-radius: 20px; padding: 6px 16px; cursor: pointer; }
 .tab.active { background: #ffd400; color: #15191f; border-color: #ffd400; }
 .label { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin: 14px 0 6px; text-align: left; }
-.cards { display: flex; gap: 10px; }
-.card { flex: 1; text-align: left; font: inherit; color: #fff; background: #1d2633; border: 2px solid #33404f; border-radius: 10px; padding: 10px; cursor: pointer; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.card { text-align: left; font: inherit; color: #fff; background: #1d2633; border: 2px solid #33404f; border-radius: 10px; padding: 10px; cursor: pointer; }
 .card.selected { border-color: #ffd400; background: #262f1d; }
 .card-swatch { height: 8px; border-radius: 4px; margin-bottom: 8px; }
 .card-title { font-weight: 800; font-size: 17px; }
@@ -189,3 +189,20 @@ body.codriver #speedo { transform: scale(0.8); transform-origin: bottom right; }
 .g-liv:disabled { opacity: 0.45; cursor: not-allowed; }
 .g-sw { width: 100%; height: 26px; border-radius: 6px; display: block; }
 .g-msg { color: #6dff8a; }
+
+/* car ratings */
+.pi-badge { display: inline-flex; align-items: stretch; border: 2px solid var(--c); border-radius: 5px; overflow: hidden; font-size: 12px; font-weight: 800; vertical-align: middle; margin-left: 4px; line-height: 1; }
+.pi-badge b { background: var(--c); color: #111; padding: 2px 5px; }
+.pi-badge span { padding: 2px 5px; color: #fff; background: rgba(0, 0, 0, 0.35); }
+.pi-badge.big { font-size: 26px; margin: 0; }
+.pi-badge.big b, .pi-badge.big span { padding: 8px 12px; }
+.rating { display: flex; gap: 18px; align-items: center; margin: 4px 0; }
+.st { flex: 1; }
+.st-row { display: flex; align-items: center; gap: 10px; margin: 3px 0; font-size: 14px; }
+.st-row span { width: 120px; text-align: left; }
+.st-row b { width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.st-bar { flex: 1; height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; }
+.st-bar i { display: block; height: 100%; background: linear-gradient(90deg, #4fd1ff, #ffd400); }
+.figures { margin: 4px 0 8px; }
+.pi-gain { color: #6dff8a; font-size: 12px; margin-left: 4px; }
+.pi-gain.zero { color: #999; }

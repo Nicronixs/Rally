@@ -14,7 +14,7 @@ import { buildPacenotes } from './pacenotes.js';
 import { PacenoteUI } from './pacenoteUI.js';
 import { hostRoom, joinRoom, normalizeCode, NAT_MESSAGE } from './net.js';
 import { getEnvironment } from './environments.js';
-import { getCar } from './cars.js';
+import { getCar, weeklyCar } from './cars.js';
 import {
   loadProfile, ownsCar, START_CAR, tunedOverrides, liveryColors, selectedLivery, addMoney, formatMoney,
   RALLY_PRIZES, CHAMPION_PRIZES, buyCar, buyUpgrade, buyLivery, selectLivery,
@@ -47,7 +47,7 @@ let SEED, ENV, CAR;
 if (weeklyActive) {
   SEED = WEEKLY.seed;
   ENV = getEnvironment(WEEKLY.env);
-  CAR = getCar(params.get('car') || localStorage.getItem('rally.car') || 'falke');
+  CAR = getCar(weeklyCar(params.get('car') || localStorage.getItem('rally.car') || 'falke'));
 } else if (champActive) {
   SEED = stageSeed(CHAMP);
   ENV = getEnvironment(RALLIES[CHAMP.rally].env);
@@ -507,7 +507,7 @@ async function main() {
       else go(freeQuery(pickSeed, pickEnv, pickCar, true));
     };
     $('m-free-go').onclick = startFree;
-    const startWeekly = () => go(`?weekly=1&car=${pickCar}&go=1`);
+    const startWeekly = () => go(`?weekly=1&car=${weeklyCar(pickCar)}&go=1`);
     $('m-weekly-go').onclick = startWeekly;
     $('m-free-random').onclick = () => go(freeQuery(Math.floor(Math.random() * 99999) + 1, pickEnv, pickCar, false) + '&menu=free');
     $('m-champ-new').onclick = () => {

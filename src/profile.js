@@ -5,7 +5,9 @@ const KEY = 'rally.profile';
 export const START_CAR = 'fuchs';
 export const START_MONEY = 15000;
 
-export const CAR_PRICES = { fuchs: 0, bison: 40000, falke: 70000 };
+export const CAR_PRICES = {
+  fuchs: 0, bison: 40000, falke: 70000, luchs: 100000, wolf: 150000, adler: 220000, panther: 320000, drache: 450000,
+};
 
 // Prize money by finishing position (1st … 8th)
 export const RALLY_PRIZES = [25000, 18000, 15000, 12000, 10000, 8000, 6000, 4000];

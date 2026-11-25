@@ -39,11 +39,31 @@ In der Meisterschaft gibt es Preisgeld (Spielwährung, gespeichert im Browser):
 - am Ende der Meisterschaft eine Prämie für den Endstand: 100.000 / 60.000 / 40.000 / 25.000 / 15.000 / 10.000 / 5.000 / 2.000 €
 
 Man startet mit dem **Fuchs R2** und 15.000 €. Im Menü-Reiter **Garage** kauft man:
-- **Autos:** Bison Klassik 40.000 €, Falke R4 70.000 €
+- **Autos** (jedes besser als das vorige):
+
+| Auto | Antrieb | Preis | PI Serie | PI voll getunt | 0–100 | Spitze |
+|---|---|---|---|---|---|---|
+| Fuchs R2 | Front | Startauto | C 558 | A 711 | 4,8 s | 187 km/h |
+| Bison Klassik | Heck | 40.000 € | C 559 | B 674 | 4,3 s | 199 km/h |
+| Falke R4 | Allrad | 70.000 € | B 611 | A 730 | 4,1 s | 199 km/h |
+| Luchs Kit Car | Front | 100.000 € | B 629 | A 779 | 4,1 s | 198 km/h |
+| Wolf GT | Heck | 150.000 € | B 684 | A 799 | 3,5 s | 210 km/h |
+| Adler WRC | Allrad | 220.000 € | A 740 | S1 853 | 3,4 s | 213 km/h |
+| Panther Gruppe B | Allrad | 320.000 € | S1 828 | S2 912 | 2,9 s | 225 km/h |
+| Drache Hybrid | Allrad | 450.000 € | S2 904 | S2 976 | 2,8 s | 237 km/h |
+
 - **Tuning** pro Auto in 3 Stufen: Motor (+6 % Leistung je Stufe), Bremsen (+10 %), Fahrwerk (stabiler, −15 % Schaden je Stufe), Reifen (+3 % Grip)
 - **Lackierungen** pro Auto: Werkslackierung gratis, dazu Mitternacht, Gletscher, Feuer und Schwarz-Gold
 
-Tuning gilt in Meisterschaft und freier Fahrt. Bei der **Strecke der Woche** fahren alle mit Serienautos (alle Autos verfügbar, kein Tuning), damit die Online-Rangliste fair bleibt. Im Koop sieht der Beifahrer die Lackierung des Fahrers. Preise und Wirkungen stehen in `src/profile.js`.
+Tuning gilt in Meisterschaft und freier Fahrt. Bei der **Strecke der Woche** fahren alle mit den drei Basisautos Fuchs, Bison und Falke in Serie (alle drei verfügbar, kein Tuning), damit die Online-Rangliste fair bleibt. Im Koop sieht der Beifahrer die Lackierung des Fahrers. Preise und Wirkungen stehen in `src/profile.js`.
+
+### Fahrzeug-Bewertung (PI und Klassen)
+
+Jedes Auto hat einen **Performance-Index** von 100 bis 999 mit Klasse **D** (bis 500), **C** (501–600), **B** (601–700), **A** (701–800), **S1** (801–900), **S2** (901–998) und **X** (999). Der Index wird aus den Physikwerten berechnet (`src/ratings.js`):
+- Kennzahlen: Höchstgeschwindigkeit (Übersetzung oder Luftwiderstand), 0–100 km/h (simuliert, abgeglichen mit `tools/gearbox-test.mjs`), Bremsweg 100–0 km/h (Bremse oder Reifengrip, je nachdem was zuerst begrenzt)
+- sechs Werte von 0 bis 10: Tempo, Beschleunigung, Handling, Bremsen, Start, Robustheit
+
+Die Werte aller Autos stehen in der Tabelle oben; `node tools/rating-calib.mjs` gibt sie neu aus. In der Garage zeigt jeder Tuning-Knopf, wie viel PI die nächste Stufe bringt. Die Bremsen-Stufen bringen 0 PI: die Autos bremsen schon stärker, als die Reifen übertragen können.
 
 ## Online-Rangliste: Strecke der Woche
 
@@ -117,7 +137,7 @@ Straßen- und Bodentexturen sind Fotos von [Poly Haven](https://polyhaven.com) (
 | `src/terrain.js` | Gelände in 128-m-Blöcken, Mesh + Rapier-Heightfield |
 | `src/road.js` | Schotterstraße, Wald, Start/Ziel/Split-Tore |
 | `src/vehicle.js` | Fahrphysik (Raycast-Fahrzeug, Stabilitätshilfe, Schaden), `TUNING` zum Abstimmen |
-| `src/cars.js` | Die drei Autos (Falke R4 Allrad, Fuchs R2 Front, Bison Klassik Heck) |
+| `src/cars.js` | Die acht Autos (Physikwerte und Lackierung; alle teilen sich ein Karosseriemodell) |
 | `src/environments.js` | Untergründe: Aussehen, Gelände, Grip, Staub |
 | `src/championship.js` | Rallyes, Gegner, Referenzzeiten, Punkte, Speicherstand |
 | `src/screens.js` | Menü, Ergebnis-, Service- und Endbildschirm |
