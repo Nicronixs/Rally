@@ -21,7 +21,7 @@ export const TUNING = {
   frontDriveShare: 0.45,
   reverseForce: 4500,
   maxReverse: 9, // m/s
-  brakeImpulse: 52, // per wheel and step (N*s)
+  brakeImpulse: 80, // per wheel and step (N*s); about 1.3-1.4 g from 100 km/h
   handbrakeImpulse: 140,
   engineBrake: 4,
   steerLow: 0.58, // rad at standstill

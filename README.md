@@ -87,6 +87,7 @@ Das Spiel färbt die Materialien nach Namen ein (`Paint`, `Stripe`, `Accent`, `R
 | `src/effects.js`, `src/audio.js` | Staub, Motor- und Schottergeräusch |
 | `src/net.js` | Koop-Verbindung (PeerJS/WebRTC): Raum-Code, Nachrichten, Herzschlag |
 | `src/main.js` | Spielablauf, Kamera, HUD, Zeitmessung |
+| `tools/brake-test.mjs` | Bremsweg aus 100 km/h je Auto und Untergrund: `node tools/brake-test.mjs '{"brakeImpulse":90}'` |
 | `tools/crash-test.mjs` | Schaden bei Aufprall mit verschiedenen Geschwindigkeiten |
 | `tools/physics-test.mjs` | Fahrverhalten ohne Browser testen: `node tools/physics-test.mjs '{"rearGrip":0.9}'` |
 
