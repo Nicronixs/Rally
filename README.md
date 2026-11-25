@@ -2,6 +2,8 @@
 
 3D-Rally im Browser (Three.js + Rapier). Ziel: Online-Koop, bei dem einer fährt und der andere als Beifahrer den Aufschrieb vorliest.
 
+**Online spielen:** https://nicronixs.github.io/Rally/ – wird bei jedem Push auf `main` automatisch neu veröffentlicht (`.github/workflows/pages.yml`).
+
 ## Starten
 
 ```
@@ -31,7 +33,7 @@ Der Beifahrer sieht vom Beifahrersitz aus mit großem Aufschrieb und „noch …
 
 Damit das zweite Gerät das Spiel überhaupt öffnen kann, muss es erreichbar sein:
 - im selben WLAN: `npm run dev -- --host` und auf dem zweiten Gerät `http://<IP-des-PCs>:5173` öffnen
-- über das Internet: das Spiel veröffentlichen (z. B. GitHub Pages)
+- über das Internet: https://nicronixs.github.io/Rally/ öffnen
 
 Die Verbindung selbst läuft direkt zwischen den beiden Browsern (WebRTC); der öffentliche PeerJS-Server vermittelt nur den Code. In sehr strengen Netzwerken (manche Firmen-/Uni-Netze) kann die direkte Verbindung scheitern.
 
