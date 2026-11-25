@@ -13,7 +13,7 @@ Dann http://localhost:5173 öffnen. `?seed=123` wählt eine andere Strecke, `?au
 
 ## Steuerung
 
-W/S Gas/Bremse · A/D Lenken · Leertaste Handbremse · R zurück auf die Strecke · C Kamera · M Ton · B Aufschrieb · V Ansagen · Enter Neustart · N neue Strecke. Gamepad: RT/LT, linker Stick, A Handbremse, Y Zurücksetzen.
+W/S Gas/Bremse · A/D Lenken · Leertaste Handbremse · R zurück auf die Strecke · C Kamera (Cockpit, Verfolger, Motorhaube) · M Ton · B Aufschrieb · V Ansagen · Enter Neustart · N neue Strecke. Gamepad: RT/LT, linker Stick, A Handbremse, Y Zurücksetzen.
 
 ## Aufbau
 
@@ -25,7 +25,7 @@ W/S Gas/Bremse · A/D Lenken · Leertaste Handbremse · R zurück auf die Streck
 | `src/vehicle.js` | Fahrphysik (Raycast-Fahrzeug, Allrad, Stabilitätshilfe), `TUNING` zum Abstimmen |
 | `src/pacenotes.js` | Aufschrieb aus der Strecke: Richtung, Grad 1–6/Haarnadel, lang, zieht zu, macht auf, Kuppe, Achtung, Distanzen |
 | `src/pacenoteUI.js` | Beifahrer-Buch (Anzeige) und Sprachansagen |
-| `src/carModel.js` | Auto-Modell aus Grundformen |
+| `src/carModel.js` | Auto-Modell aus Grundformen, Cockpit mit Lenkrad und Überrollkäfig |
 | `src/effects.js`, `src/audio.js` | Staub, Motor- und Schottergeräusch |
 | `src/main.js` | Spielablauf, Kamera, HUD, Zeitmessung |
 | `tools/physics-test.mjs` | Fahrverhalten ohne Browser testen: `node tools/physics-test.mjs '{"rearGrip":0.9}'` |

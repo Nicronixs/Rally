@@ -101,7 +101,7 @@ async function main() {
     trackIndex: stage.startIndex,
     splits: [],
     flipTimer: 0,
-    camMode: 0,
+    camMode: Number(localStorage.getItem('rally.cam') || 0), // 0 cockpit, 1 chase, 2 bonnet
     best: Number(localStorage.getItem(bestKey)) || null,
     bestSplits: JSON.parse(localStorage.getItem(bestSplitsKey) || 'null'),
   };
@@ -213,11 +213,19 @@ async function main() {
   const lookTarget = new THREE.Vector3();
   const tmpV = new THREE.Vector3();
 
+  const cockpitQuat = new THREE.Quaternion();
+  let cockpitInit = false;
+  let lookYaw = 0;
+  const qBase = new THREE.Quaternion(), qTmp = new THREE.Quaternion();
+  const euler = new THREE.Euler();
+  const headLocal = new THREE.Vector3();
+
   function updateCamera(dt, pos, quat) {
     const fwd = tmpV.set(1, 0, 0).applyQuaternion(quat);
     const carYaw = Math.atan2(fwd.z, fwd.x);
     const speed = Math.abs(vehicle.speed);
-    if (game.camMode === 0) {
+    car.setCockpitView(game.camMode === 0);
+    if (game.camMode === 1) {
       let d = carYaw - camYaw;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
@@ -231,16 +239,31 @@ async function main() {
       camera.position.copy(camPos);
       lookTarget.set(pos.x + Math.cos(camYaw) * 3, pos.y + 0.9, pos.z + Math.sin(camYaw) * 3);
       camera.lookAt(lookTarget);
+      cockpitInit = false;
     } else {
-      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quat);
-      camera.position.copy(pos).addScaledVector(fwd, 0.3).addScaledVector(up, 1.12);
-      camera.up.copy(up);
-      lookTarget.copy(camera.position).addScaledVector(fwd, 10);
-      camera.lookAt(lookTarget);
-      camera.up.set(0, 1, 0);
+      // driver's eyes (cockpit) or bonnet camera, rigidly attached to the car
+      // but with slightly smoothed rotation so bumps don't make the view jittery
+      if (!cockpitInit) { cockpitQuat.copy(quat); cockpitInit = true; }
+      cockpitQuat.slerp(quat, 1 - Math.exp(-dt * 22));
+      if (game.camMode === 0) headLocal.copy(car.headPosition);
+      else headLocal.set(1.25, 0.5, 0);
+      headLocal.y -= 0.02;
+      camera.position.copy(headLocal).applyQuaternion(quat).add(pos);
+      if (game.camMode === 0) {
+        // gravel vibration
+        const shake = Math.min(1, speed / 30) * 0.006;
+        camera.position.y += (Math.random() - 0.5) * shake;
+      }
+      // look a little into the corner the car is steering into
+      lookYaw += (vehicle.steer * 0.5 - lookYaw) * (1 - Math.exp(-dt * 4));
+      euler.set(game.camMode === 0 ? -0.05 : -0.04, -Math.PI / 2 + (game.camMode === 0 ? lookYaw : 0), 0, 'YXZ');
+      qBase.setFromEuler(euler);
+      camera.quaternion.copy(qTmp.copy(cockpitQuat).multiply(qBase));
       camInit = false;
     }
-    const fov = 62 + Math.min(14, speed * 0.22);
+    car.steeringWheel.rotation.x = -(vehicle.steer / TUNING.steerLow) * 2.2;
+    const fovBase = game.camMode === 0 ? 72 : 62;
+    const fov = fovBase + Math.min(game.camMode === 0 ? 8 : 14, speed * (game.camMode === 0 ? 0.12 : 0.22));
     if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
     sky.position.copy(camera.position);
   }
@@ -265,7 +288,10 @@ async function main() {
     if (inp.actions.has('KeyM')) audio.toggleMute();
     if (inp.actions.has('KeyB')) notebook.toggleBook();
     if (inp.actions.has('KeyV')) notebook.toggleVoice();
-    if (inp.actions.has('KeyC')) game.camMode = (game.camMode + 1) % 2;
+    if (inp.actions.has('KeyC')) {
+      game.camMode = (game.camMode + 1) % 3;
+      localStorage.setItem('rally.cam', String(game.camMode));
+    }
     if (inp.actions.has('KeyN')) { location.search = `?seed=${Math.floor(Math.random() * 99999) + 1}`; return; }
     if (inp.actions.has('Enter') && game.state !== 'intro') restart();
     if (inp.actions.has('KeyR') && (game.state === 'running' || game.state === 'countdown')) {

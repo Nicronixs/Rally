@@ -44,7 +44,8 @@ export function buildCarModel({ color = 0xf2f2f2, stripe = 0x1f5fbf, accent = 0x
   // lower body
   body.add(extrudeProfile([[-2.0, -0.3], [1.92, -0.3], [2.06, -0.06], [2.0, 0.16], [0.82, 0.32], [-1.92, 0.34], [-2.05, 0.08]], 1.72, paint));
   // glasshouse
-  body.add(extrudeProfile([[0.8, 0.3], [0.02, 0.84], [-1.28, 0.84], [-1.86, 0.42], [-1.86, 0.3]], 1.42, glass));
+  const glassHouse = extrudeProfile([[0.8, 0.3], [0.02, 0.84], [-1.28, 0.84], [-1.86, 0.42], [-1.86, 0.3]], 1.42, glass);
+  body.add(glassHouse);
   // roof, pillars
   const roof = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.07, 1.44), paint);
   roof.position.set(-0.63, 0.88, 0); roof.castShadow = true; body.add(roof);
@@ -123,5 +124,80 @@ export function buildCarModel({ color = 0xf2f2f2, stripe = 0x1f5fbf, accent = 0x
     wheels.push({ steerGroup, spin });
   }
 
-  return { root, wheels };
+  const cockpit = buildInterior(body, paint, black);
+
+  // hide the opaque glass when looking out from the driver's seat
+  function setCockpitView(on) {
+    glassHouse.visible = !on;
+  }
+
+  return { root, wheels, steeringWheel: cockpit.steeringWheel, setCockpitView, headPosition: cockpit.head };
+}
+
+// Interior seen from the driver's seat (left-hand drive: driver on the -Z side).
+function buildInterior(body, paint, black) {
+  const dashMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2c, roughness: 0.9 });
+  const cageMat = new THREE.MeshStandardMaterial({ color: 0xd9d9d9, roughness: 0.4, metalness: 0.6 });
+  const add = (mesh, x, y, z) => { mesh.position.set(x, y, z); mesh.receiveShadow = true; body.add(mesh); return mesh; };
+  const DRIVER_Z = -0.36;
+
+  // A-pillars along the windscreen edges, C-pillars at the back, windscreen header
+  const beam = (x1, y1, x2, y2, z, thick, mat) => {
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    const m = add(new THREE.Mesh(new THREE.BoxGeometry(len, thick, thick), mat), (x1 + x2) / 2, (y1 + y2) / 2, z);
+    m.rotation.z = Math.atan2(y2 - y1, x2 - x1);
+    return m;
+  };
+  for (const z of [-0.69, 0.69]) {
+    beam(0.8, 0.31, 0.02, 0.85, z, 0.09, paint);
+    beam(-1.28, 0.85, -1.86, 0.42, z, 0.12, paint);
+  }
+  add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.035, 1.42), paint), 0.05, 0.855, 0);
+
+  // dashboard with instrument hood
+  add(new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 1.44), dashMat), 0.58, 0.36, 0);
+  const hood = add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 0.32), dashMat), 0.46, 0.45, DRIVER_Z);
+  hood.rotation.z = -0.25;
+  add(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.16), black), 0.04, 0.76, -0.05); // mirror
+
+  // roll cage
+  const tube = (a, b) => {
+    const va = new THREE.Vector3(...a), vb = new THREE.Vector3(...b);
+    const len = va.distanceTo(vb);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, len, 8), cageMat);
+    m.position.copy(va).add(vb).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize());
+    body.add(m);
+  };
+  for (const z of [-0.62, 0.62]) {
+    tube([-0.8, 0.3, z], [-0.8, 0.8, z]); // main hoop legs
+    tube([0.62, 0.3, z], [0.06, 0.78, z]); // front hoop along the A-pillar
+    tube([0.06, 0.78, z], [-0.8, 0.8, z]); // roof bar
+  }
+  tube([-0.8, 0.8, -0.62], [-0.8, 0.8, 0.62]);
+  tube([-0.8, 0.8, -0.62], [-0.8, 0.32, 0.62]); // diagonal
+
+  // steering wheel: tilted towards the driver, spins around its own axis
+  const column = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.3, 8), black);
+  column.rotation.z = Math.PI / 2 + 0.35;
+  add(column, 0.38, 0.41, DRIVER_Z);
+  const mount = new THREE.Group();
+  mount.position.set(0.24, 0.46, DRIVER_Z);
+  mount.rotation.z = 0.35;
+  body.add(mount);
+  const spinner = new THREE.Group();
+  mount.add(spinner);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.02, 8, 28), black);
+  rim.rotation.y = Math.PI / 2;
+  spinner.add(rim);
+  const spokeH = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.3), dashMat);
+  spinner.add(spokeH);
+  const spokeV = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.17, 0.035), dashMat);
+  spokeV.position.y = -0.085;
+  spinner.add(spokeV);
+  const marker = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.045, 0.03), new THREE.MeshStandardMaterial({ color: 0xffd400 }));
+  marker.position.y = 0.16;
+  spinner.add(marker);
+
+  return { steeringWheel: spinner, head: new THREE.Vector3(-0.4, 0.71, DRIVER_Z) };
 }
