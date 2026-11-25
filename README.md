@@ -32,6 +32,19 @@ Einstellbar in `src/championship.js` (`CUT_*`, `JUMP_START_PENALTIES`, `RETIRE_P
 
 **Gegnerzeiten** werden aus einer Referenzzeit pro Prüfung berechnet (Kurvenradien, Beschleunigung, Bremsen, Grip des Untergrunds) mal Können des Gegners plus etwas Zufall und gelegentlichen Fehlern.
 
+## Online-Rangliste: Strecke der Woche
+
+Jede Kalenderwoche (ISO-Woche, UTC) gibt es eine feste Strecke für alle – Untergrund und Strecke ergeben sich aus der Woche. Im Menü unter **Woche** sieht man die Rangliste und startet die Fahrt; man darf beliebig oft fahren, es zählt die beste Zeit pro Name (inkl. Strafen). Nach dem Ziel Namen eingeben und „Zeit eintragen“.
+
+Die Zeiten liegen in einer Supabase-Datenbank. Einrichtung:
+
+1. Auf https://supabase.com ein kostenloses Projekt anlegen.
+2. Im Dashboard unter **SQL Editor** den Inhalt von [`supabase/weekly.sql`](supabase/weekly.sql) ausführen. Das legt die Tabelle an und erlaubt über die öffentliche Schnittstelle nur: Zeiten der laufenden Woche eintragen und alle Zeiten lesen – nicht ändern, nicht löschen, keine alten Wochen.
+3. Unter **Project Settings → API** die *Project URL* und den *anon public* Key kopieren und im GitHub-Repo als Secrets `SUPABASE_URL` und `SUPABASE_ANON_KEY` eintragen, danach den Pages-Workflow neu starten.
+4. Lokal: eine Datei `.env.local` mit `VITE_SUPABASE_URL=…` und `VITE_SUPABASE_ANON_KEY=…` anlegen (wird nicht ins Repo übernommen).
+
+Hinweis: Die Zeiten werden vom Browser gemeldet. Wer es darauf anlegt, kann eine falsche Zeit eintragen – die Datenbank prüft nur Plausibilität (30 s bis 60 min, gültiges Auto, nur aktuelle Woche).
+
 ## Koop spielen
 
 1. Fahrer: im Menü unter „Koop“ „Raum erstellen“ – es erscheint ein 5-stelliger Code. Danach Meisterschaft oder freie Fahrt starten; der Raum bleibt über Etappenwechsel offen und der Beifahrer folgt automatisch.

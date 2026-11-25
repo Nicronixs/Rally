@@ -1,6 +1,6 @@
 // HTML for the menu, championship, results and service screens.
 import { CARS, carStats } from './cars.js';
-import { ENVIRONMENTS } from './environments.js';
+import { ENVIRONMENTS, getEnvironment } from './environments.js';
 import { TUNING } from './vehicle.js';
 import {
   RALLIES, STAGES_PER_RALLY, SERVICE_MINUTES, PLAYER,
@@ -42,7 +42,7 @@ export function barColor(v) {
 }
 
 // Main menu
-export function menuScreen({ champ, car, env, seed, hostCode }) {
+export function menuScreen({ champ, car, env, seed, hostCode, weekly }) {
   const cont = champ && !champ.finished
     ? `<button class="btn primary" id="m-champ-continue">Fortsetzen · ${RALLIES[champ.rally].icon} ${esc(RALLIES[champ.rally].name)}, WP ${champ.stage + 1}/${STAGES_PER_RALLY}</button>`
     : '';
@@ -50,6 +50,7 @@ export function menuScreen({ champ, car, env, seed, hostCode }) {
   <div class="tabs">
     <button class="tab active" data-tab="champ">Meisterschaft</button>
     <button class="tab" data-tab="free">Freie Fahrt</button>
+    <button class="tab" data-tab="weekly">Woche</button>
     <button class="tab" data-tab="coop">Koop</button>
   </div>
   <section data-pane="champ">
@@ -70,6 +71,9 @@ export function menuScreen({ champ, car, env, seed, hostCode }) {
       <button class="btn" id="m-free-random">Andere Strecke</button>
       <button class="btn primary" id="m-free-go">Losfahren <span class="small">(Enter)</span></button>
     </div>
+  </section>
+  <section data-pane="weekly" class="hidden">
+    ${weeklyPane(weekly, car)}
   </section>
   <section data-pane="coop" class="hidden">
     <p class="sub">Einer fährt, der andere sagt auf einem zweiten Gerät den Aufschrieb an.</p>
@@ -158,3 +162,41 @@ export function finalScreen(champ) {
 }
 
 export { PLAYER };
+
+// ---------- Strecke der Woche ----------
+const dateDe = (d) => d.toLocaleDateString('de-AT', { day: 'numeric', month: 'numeric', timeZone: 'UTC' });
+
+function weeklyPane(weekly, car) {
+  const env = getEnvironment(weekly.env);
+  const until = new Date(weekly.week.end.getTime() - 86400000);
+  return `<p class="sub">Eine Strecke für alle, jede Woche neu. Du kannst so oft fahren, wie du willst – in der Rangliste zählt deine beste Zeit (inkl. Strafen).</p>
+    <div class="weekly-head"><b>${esc(weekly.week.id.replace('-W', ' · KW '))}</b> · ${dateDe(weekly.week.start)}–${dateDe(until)} · ${esc(env.name)} (${esc(env.surfaceName)}) · Strecke #${weekly.seed}</div>
+    <div class="label">Auto</div>
+    ${carCards(car)}
+    <button class="btn primary" id="m-weekly-go">Strecke der Woche fahren</button>
+    <div class="label">Rangliste</div>
+    <div id="weekly-list" class="weekly-list"><p class="small">Lade …</p></div>`;
+}
+
+export function weeklyTable(rows, myName) {
+  if (!rows.length) return '<p class="small">Noch keine Zeiten diese Woche – sei der Erste!</p>';
+  const me = (myName || '').trim().toLowerCase();
+  const best = rows[0].time_ms;
+  const carName = { falke: 'Falke R4', fuchs: 'Fuchs R2', bison: 'Bison Klassik' };
+  return `<table class="standings">${rows.map((r, i) => `<tr class="${r.name.trim().toLowerCase() === me ? 'me' : ''}">
+    <td>${i + 1}.</td><td>${esc(r.name)}</td><td class="small">${esc(carName[r.car] || r.car)}</td>
+    <td>${formatTime(r.time_ms / 1000)}</td><td>${i ? '+' + ((r.time_ms - best) / 1000).toFixed(2) : ''}</td></tr>`).join('')}</table>`;
+}
+
+export function weeklyResultScreen(t, penalty, name, personalBest, ready) {
+  const pen = penalty > 0.05 ? ` · inkl. ${penalty.toFixed(1).replace('.', ',')} s Strafe` : '';
+  const pb = personalBest != null ? `<div class="result-best">${t <= personalBest ? 'Deine beste Zeit diese Woche!' : `Deine Bestzeit diese Woche: ${formatTime(personalBest)}`}</div>` : '';
+  const form = ready ? `<div class="weekly-form">
+      <input id="w-name" maxlength="20" placeholder="Dein Name" autocomplete="nickname" spellcheck="false" value="${esc(name || '')}" />
+      <button class="btn primary" id="w-submit">Zeit eintragen</button>
+    </div><p class="small" id="w-status"></p>` : '<p class="small">Die Online-Rangliste ist noch nicht eingerichtet.</p>';
+  return `<p class="sub">Strecke der Woche${pen}</p><div class="result-time">${formatTime(t)}</div>${pb}${form}
+    <div id="weekly-list" class="weekly-list"></div>
+    <button class="btn" id="w-again">Nochmal fahren <span class="small">(Enter)</span></button>
+    <button class="btn ghost" id="w-menu">Hauptmenü</button>`;
+}

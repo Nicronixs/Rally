@@ -14,6 +14,7 @@ import { PacenoteUI } from './pacenoteUI.js';
 import { hostRoom, joinRoom, normalizeCode, NAT_MESSAGE } from './net.js';
 import { getEnvironment } from './environments.js';
 import { getCar } from './cars.js';
+import { leaderboardReady, isoWeek, weeklyStage, fetchWeekly, submitWeekly, NAME_KEY } from './leaderboard.js';
 import {
   RALLIES, RESET_PENALTY, OFF_TRACK_MARGIN, CUT_MIN_GAIN, CUT_PENALTIES, CUT_REF_SPEED, JUMP_START_PENALTIES,
   RETIRE_PENALTY, OFF_RESET_TIME, OFF_RESET_PENALTY, bestRivalTime, SERVICE_MINUTES, loadChampionship, saveChampionship, newChampionship,
@@ -21,6 +22,7 @@ import {
 } from './championship.js';
 import {
   formatTime, menuScreen, champIntroScreen, champResultScreen, serviceScreen, finalScreen, barColor,
+  weeklyTable, weeklyResultScreen,
 } from './screens.js';
 
 const $ = (id) => document.getElementById(id);
@@ -33,8 +35,15 @@ const JOIN = params.get('join');
 // ---------- what to load: championship stage, free drive or co-driver view ----------
 const CHAMP = params.has('champ') ? loadChampionship() : null;
 const champActive = !!(CHAMP && !CHAMP.finished) && !JOIN;
+const WEEK = isoWeek();
+const WEEKLY = weeklyStage(WEEK);
+const weeklyActive = params.has('weekly') && !JOIN;
 let SEED, ENV, CAR;
-if (champActive) {
+if (weeklyActive) {
+  SEED = WEEKLY.seed;
+  ENV = getEnvironment(WEEKLY.env);
+  CAR = getCar(params.get('car') || localStorage.getItem('rally.car') || 'falke');
+} else if (champActive) {
   SEED = stageSeed(CHAMP);
   ENV = getEnvironment(RALLIES[CHAMP.rally].env);
   CAR = getCar(CHAMP.car);
@@ -43,7 +52,7 @@ if (champActive) {
   ENV = getEnvironment(params.get('env') || 'forest');
   CAR = getCar(params.get('car') || localStorage.getItem('rally.car') || 'falke');
 }
-const MODE = JOIN ? 'codriver' : champActive ? 'champ' : params.has('champ') && CHAMP && CHAMP.finished ? 'final' : 'free';
+const MODE = JOIN ? 'codriver' : weeklyActive ? 'weekly' : champActive ? 'champ' : params.has('champ') && CHAMP && CHAMP.finished ? 'final' : 'free';
 
 function go(query) { location.search = query; }
 function freeQuery(seed, env, car, start) { return `?seed=${seed}&env=${env}&car=${car}${start ? '&go=1' : ''}`; }
@@ -180,7 +189,7 @@ async function main() {
     const sp0 = vehicle.body.translation();
     game.startPos = { x: sp0.x, z: sp0.z };
     game.splits = [];
-    if (MODE === 'free') vehicle.setDamage({});
+    if (MODE === 'free' || MODE === 'weekly') vehicle.setDamage({});
     car.setDamage(vehicle.damage);
     $('splits').innerHTML = '';
     hideOverlay();
@@ -211,6 +220,11 @@ async function main() {
       const res = champResultScreen(CHAMP, rally, stg, rallyDone, game.penalty);
       if (link) link.send({ t: 'finish', time: t, line: `Platz ${res.pos} auf dieser Prüfung` });
       setTimeout(() => showChampResult(res.html, rallyDone), 1800);
+      return;
+    }
+    if (MODE === 'weekly') {
+      if (link) link.send({ t: 'finish', time: t, line: 'Strecke der Woche' });
+      setTimeout(() => showWeeklyResult(t), 1800);
       return;
     }
     let line;
@@ -359,10 +373,60 @@ async function main() {
     });
   }
 
+  // ---------- Strecke der Woche ----------
+  const weeklyBestKey = `rally.weeklyBest.${WEEK.id}`;
+  async function loadWeeklyList(myName) {
+    const el = $('weekly-list');
+    if (!el) return;
+    if (!leaderboardReady) { el.innerHTML = '<p class="small">Die Online-Rangliste ist noch nicht eingerichtet.</p>'; return; }
+    try {
+      el.innerHTML = weeklyTable(await fetchWeekly(WEEK.id), myName);
+    } catch (e) {
+      el.innerHTML = `<p class="small">${e.message}</p>`;
+    }
+  }
+
+  function showWeeklyResult(t) {
+    if (game.state !== 'finished') return;
+    const prevBest = Number(localStorage.getItem(weeklyBestKey)) || null;
+    if (prevBest === null || t < prevBest) localStorage.setItem(weeklyBestKey, String(t));
+    const name = localStorage.getItem(NAME_KEY) || '';
+    showOverlay(weeklyResultScreen(t, game.penalty, name, Math.min(t, prevBest ?? t), leaderboardReady));
+    $('w-again').onclick = restart;
+    $('w-menu').onclick = () => go('?menu=weekly');
+    enterAction = restart;
+    loadWeeklyList(name);
+    if (!leaderboardReady) return;
+    const input = $('w-name');
+    let sent = false;
+    const send = async () => {
+      const n = input.value.trim();
+      if (n.length < 2) { $('w-status').textContent = 'Bitte einen Namen mit mindestens 2 Zeichen eingeben.'; input.focus(); return; }
+      if (sent) return;
+      sent = true;
+      $('w-submit').disabled = true;
+      $('w-status').textContent = 'Wird eingetragen …';
+      localStorage.setItem(NAME_KEY, n);
+      try {
+        await submitWeekly({ week: WEEK.id, name: n, timeMs: t * 1000, penaltyMs: game.penalty * 1000, car: CAR.id });
+        $('w-status').textContent = 'Eingetragen!';
+        loadWeeklyList(n);
+      } catch (e) {
+        sent = false;
+        $('w-submit').disabled = false;
+        $('w-status').textContent = e.message;
+      }
+    };
+    $('w-submit').onclick = send;
+    // typing a name must not trigger game keys (N = new stage, M = sound …)
+    input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') send(); });
+  }
+
   function showMenu() {
     let pickCar = CAR.id, pickEnv = ENV.id, pickSeed = SEED;
     const saved = loadChampionship();
-    showOverlay(menuScreen({ champ: saved, car: pickCar, env: pickEnv, seed: pickSeed, hostCode: game.role === 'driver' ? game.roomCode : null }));
+    showOverlay(menuScreen({ champ: saved, car: pickCar, env: pickEnv, seed: pickSeed, hostCode: game.role === 'driver' ? game.roomCode : null, weekly: { ...WEEKLY, week: WEEK } }));
+    loadWeeklyList(localStorage.getItem(NAME_KEY));
     $('help').classList.remove('hidden');
     const scr = $('screen');
     scr.querySelectorAll('.tab').forEach((t) => {
@@ -386,6 +450,8 @@ async function main() {
       else go(freeQuery(pickSeed, pickEnv, pickCar, true));
     };
     $('m-free-go').onclick = startFree;
+    const startWeekly = () => go(`?weekly=1&car=${pickCar}&go=1`);
+    $('m-weekly-go').onclick = startWeekly;
     $('m-free-random').onclick = () => go(freeQuery(Math.floor(Math.random() * 99999) + 1, pickEnv, pickCar, false) + '&menu=free');
     $('m-champ-new').onclick = () => {
       if (saved && !saved.finished && !confirm('Die laufende Meisterschaft wird überschrieben. Neu starten?')) return;
@@ -400,6 +466,7 @@ async function main() {
     enterAction = () => {
       const tab = scr.querySelector('.tab.active').dataset.tab;
       if (tab === 'free') startFree();
+      else if (tab === 'weekly') startWeekly();
       else if (tab === 'champ') ($('m-champ-continue') || $('m-champ-new')).click();
     };
   }
@@ -815,7 +882,7 @@ async function main() {
       localStorage.setItem('rally.cam', String(game.camMode));
     }
     if (inp.actions.has('Enter') && overlayOpen && enterAction) enterAction();
-    else if (inp.actions.has('Enter') && MODE === 'free' && !isCo && game.state !== 'intro') restart();
+    else if (inp.actions.has('Enter') && (MODE === 'free' || MODE === 'weekly') && !isCo && game.state !== 'intro') restart();
     if (inp.actions.has('KeyN') && MODE === 'free' && !isCo && !overlayOpen) { go(freeQuery(Math.floor(Math.random() * 99999) + 1, ENV.id, CAR.id, true)); return; }
     // in fullscreen the browser wants Esc held to leave it, so Esc does not open the menu there
     if (inp.actions.has('Escape') && !document.fullscreenElement && !isCo && game.state !== 'intro') {

@@ -2,3 +2,4 @@ node_modules/
 dist/
 blender/previews/
 __pycache__/
+.env.local
