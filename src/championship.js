@@ -11,6 +11,10 @@ export const STAGES_PER_RALLY = 3;
 export const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 export const SERVICE_MINUTES = 45; // service only between rallies
 export const RESET_PENALTY = 5; // seconds for "R" (recovery) in the championship
+// driving too far off the road: beyond the ditch, after a short grace time, every second costs extra
+export const OFF_TRACK_MARGIN = 4; // metres beyond the road edge
+export const OFF_TRACK_GRACE = 1.0; // seconds that are free
+export const OFF_TRACK_RATE = 2; // penalty seconds per second off the track
 
 // Fictional rivals; skill is a factor on the reference time (lower = faster).
 export const RIVALS = [

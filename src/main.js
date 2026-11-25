@@ -15,7 +15,7 @@ import { hostRoom, joinRoom, normalizeCode, NAT_MESSAGE } from './net.js';
 import { getEnvironment } from './environments.js';
 import { getCar } from './cars.js';
 import {
-  RALLIES, RESET_PENALTY, SERVICE_MINUTES, loadChampionship, saveChampionship, newChampionship,
+  RALLIES, RESET_PENALTY, OFF_TRACK_MARGIN, OFF_TRACK_GRACE, OFF_TRACK_RATE, SERVICE_MINUTES, loadChampionship, saveChampionship, newChampionship,
   stageSeed, referenceTime, recordStage, repairCost,
 } from './championship.js';
 import {
@@ -133,6 +133,8 @@ async function main() {
     state: 'intro', // intro, countdown, running, finished
     time: 0,
     penalty: 0,
+    offTime: 0, // continuous seconds off the track
+    offPenalty: 0, // penalty seconds from driving off the track
     countdown: 0,
     trackIndex: stage.startIndex,
     splits: [],
@@ -165,6 +167,8 @@ async function main() {
     game.countdown = 3.5;
     game.time = 0;
     game.penalty = 0;
+    game.offTime = 0;
+    game.offPenalty = 0;
     game.splits = [];
     if (MODE === 'free') vehicle.setDamage({});
     car.setDamage(vehicle.damage);
@@ -194,6 +198,7 @@ async function main() {
     } else {
       line = `Bestzeit ${formatTime(game.best)} (+${(t - game.best).toFixed(2)} s)`;
     }
+    if (game.penalty > 0) line += ` · inkl. ${game.penalty.toFixed(1).replace('.', ',')} s Strafe`;
     if (link) link.send({ t: 'finish', time: t, line });
     setTimeout(() => showResult(t, line), 1800);
   }
@@ -847,6 +852,14 @@ async function main() {
         $('message').textContent = 'ZIEL!';
         finish();
       }
+      // off-track penalty
+      if (distFromRoad > stage.halfWidth + OFF_TRACK_MARGIN) {
+        game.offTime += dt;
+        if (game.offTime > OFF_TRACK_GRACE) {
+          game.penalty += OFF_TRACK_RATE * dt;
+          game.offPenalty += OFF_TRACK_RATE * dt;
+        }
+      } else game.offTime = 0;
     }
 
     notebook.update(ti, vehicle.speed, game.state === 'running');
@@ -862,7 +875,11 @@ async function main() {
     if (game.state === 'running' && !isCo) {
       if (game.flipTimer > 0.6) hint = 'Überschlagen – gleich geht’s weiter';
       else if (distFromRoad > 35) hint = MODE === 'champ' ? `Weit weg von der Strecke – R drücken (+${RESET_PENALTY} s)` : 'Weit weg von der Strecke – R drücken';
+      else if (game.offTime > OFF_TRACK_GRACE) hint = `Neben der Strecke – Strafe läuft (+${OFF_TRACK_RATE} s pro Sekunde)`;
+      else if (game.offTime > 0) hint = 'Zurück auf die Strecke!';
     }
+    const pen = isCo ? 0 : game.penalty;
+    $('penalty').textContent = pen > 0.05 ? `Strafe +${pen.toFixed(1).replace('.', ',')} s` : '';
     $('hint').textContent = hint;
     if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) $('toast').textContent = ''; }
 

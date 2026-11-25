@@ -29,7 +29,7 @@ export const TUNING = {
   shiftTime: 0.09, // s without drive while shifting
   upshiftRpm: 7200, // automatic
   downshiftRpm: 3300, // automatic
-  brakeImpulse: 80, // per wheel and step (N*s); about 1.3-1.4 g from 100 km/h
+  brakeImpulse: 180, // per wheel and step (N*s); about 2 g from 100 km/h, snow is grip-limited
   handbrakeImpulse: 140,
   engineBrake: 4,
   steerLow: 0.58, // rad at standstill
