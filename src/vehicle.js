@@ -19,8 +19,16 @@ export const TUNING = {
   power: 230000, // watts
   maxDriveForce: 9800, // newtons, total
   frontDriveShare: 0.45,
-  reverseForce: 4500,
   maxReverse: 9, // m/s
+  // sequential gearbox
+  gearRatios: [3.3, 2.5, 2.02, 1.7, 1.46, 1.27], // close-ratio rally box
+  reverseRatio: 3.3,
+  finalDrive: 3.85,
+  idleRpm: 900,
+  redline: 7600,
+  shiftTime: 0.09, // s without drive while shifting
+  upshiftRpm: 7200, // automatic
+  downshiftRpm: 3300, // automatic
   brakeImpulse: 80, // per wheel and step (N*s); about 1.3-1.4 g from 100 km/h
   handbrakeImpulse: 140,
   engineBrake: 4,
@@ -55,7 +63,23 @@ function rotate(q, v) {
   };
 }
 
+const T_IDLE = 900;
 const IMPACT_THRESHOLD = 60000; // newtons; below this a contact does no harm
+
+// Torque curve, 1 = peak torque (scaled per car so the peak power matches TUNING.power).
+const TORQUE_CURVE = [[0, 0.55], [1000, 0.62], [2500, 0.88], [4000, 1.0], [6000, 1.0], [7000, 0.96], [7600, 0.92], [9000, 0.7]];
+function torqueShape(rpm) {
+  for (let i = 1; i < TORQUE_CURVE.length; i++) {
+    const [r1, t1] = TORQUE_CURVE[i];
+    if (rpm <= r1) {
+      const [r0, t0] = TORQUE_CURVE[i - 1];
+      return t0 + ((t1 - t0) * (rpm - r0)) / (r1 - r0);
+    }
+  }
+  return TORQUE_CURVE[TORQUE_CURVE.length - 1][1];
+}
+const RPM_PER_RAD_S = 60 / (2 * Math.PI);
+const DRIVETRAIN_EFFICIENCY = 1.0; // TUNING.power is power at the wheels
 
 export class Vehicle {
   // overrides: per-car tuning (see cars.js)
@@ -110,6 +134,45 @@ export class Vehicle {
     this.damage = { engine: 0, suspension: 0, body: 0 };
     this.pull = Math.random() < 0.5 ? -1 : 1; // which way a bent suspension pulls
     this.lastImpact = 0;
+    // gearbox: -1 = reverse, 0 = neutral, 1..6
+    this.gear = 1;
+    this.manual = false;
+    this.shiftTimer = 0;
+    this.limiter = false;
+    let best = 0;
+    for (let r = 1000; r <= T.redline; r += 100) best = Math.max(best, torqueShape(r) * r / RPM_PER_RAD_S);
+    this.peakTorque = T.power / best; // Nm
+  }
+
+  ratio(gear) {
+    const T = this.T;
+    if (gear > 0) return T.gearRatios[gear - 1];
+    if (gear < 0) return T.reverseRatio;
+    return 0;
+  }
+
+  // engine rpm the wheels would turn the engine at in a gear
+  wheelRpm(gear, speed = this.speed) {
+    const dir = gear < 0 ? -1 : 1;
+    return Math.max(0, (dir * speed) / this.T.wheelRadius * RPM_PER_RAD_S * this.ratio(gear) * this.T.finalDrive);
+  }
+
+  // returns false if the shift is refused
+  shiftUp() {
+    if (this.gear >= this.T.gearRatios.length) return false;
+    this.gear += 1;
+    if (this.gear > 1) this.shiftTimer = this.T.shiftTime;
+    return true;
+  }
+
+  shiftDown() {
+    if (this.gear <= -1) return false;
+    if (this.gear === 0 && this.speed > 2) return false; // no reverse while rolling forwards
+    // protect the engine from a downshift past the limiter
+    if (this.gear > 1 && this.wheelRpm(this.gear - 1) > this.T.redline + 300) return false;
+    this.gear -= 1;
+    if (this.gear > 0) this.shiftTimer = this.T.shiftTime;
+    return true;
   }
 
   setDamage(d) {
@@ -148,6 +211,9 @@ export class Vehicle {
     b.setLinvel({ x: 0, y: 0, z: 0 }, true);
     b.setAngvel({ x: 0, y: 0, z: 0 }, true);
     this.steer = 0;
+    this.gear = 1;
+    this.shiftTimer = 0;
+    this.rpm = T_IDLE;
   }
 
   // input: { throttle 0..1, brake 0..1, steer -1..1 (+ = left), handbrake bool }
@@ -174,17 +240,42 @@ export class Vehicle {
     vc.setWheelSteering(0, this.steer + pull);
     vc.setWheelSteering(1, this.steer + pull);
 
+    // gearbox: in automatic mode it chooses the gear itself, and the brake pedal reverses at a standstill
+    let pedal = input.throttle, braking = input.brake;
+    if (!this.manual) {
+      if (this.gear === 0) this.gear = 1;
+      if (this.gear > 0 && abs < 1 && input.brake > 0 && input.throttle === 0) this.gear = -1;
+      else if (this.gear < 0 && input.throttle > 0 && speed > -1) this.gear = 1;
+      if (this.gear < 0) { pedal = input.brake; braking = input.throttle; }
+      if (this.gear > 0 && this.shiftTimer <= 0 && !this.airborne) {
+        if (this.wheelRpm(this.gear) > T.upshiftRpm && this.gear < T.gearRatios.length) this.shiftUp();
+        else if (this.gear > 1 && this.wheelRpm(this.gear) < T.downshiftRpm && this.wheelRpm(this.gear - 1) < T.upshiftRpm - 400) this.shiftDown();
+      }
+    }
+    this.shiftTimer = Math.max(0, this.shiftTimer - dt);
+
+    // engine speed: wheels through the gearbox, a slipping clutch when pulling away, free revving in neutral or in the air
+    let engineRpm;
+    if (this.gear === 0) engineRpm = T.idleRpm + pedal * (T.redline - T.idleRpm);
+    else {
+      const launch = T.idleRpm + pedal * (Math.abs(this.gear) === 1 ? 3200 : 1200);
+      engineRpm = Math.max(this.wheelRpm(this.gear), launch);
+      if (this.airborne && pedal > 0) engineRpm = Math.max(engineRpm, this.rpm + 9000 * dt);
+    }
+    this.limiter = engineRpm >= T.redline;
+    engineRpm = Math.min(engineRpm, T.redline + 150);
+
     // drive & brakes
     let drive = 0, brake = 0;
-    if (input.throttle > 0 && speed > -1) {
-      drive = Math.min(T.maxDriveForce, (T.power * (1 - 0.5 * dmg.engine)) / Math.max(abs, 1)) * input.throttle;
+    if (this.gear !== 0 && pedal > 0 && this.shiftTimer <= 0 && !this.limiter) {
+      const torque = torqueShape(engineRpm) * this.peakTorque * pedal * (1 - 0.5 * dmg.engine);
+      drive = Math.min(T.maxDriveForce, (torque * this.ratio(this.gear) * T.finalDrive * DRIVETRAIN_EFFICIENCY) / T.wheelRadius);
+      if (this.gear < 0) drive = speed < -T.maxReverse ? 0 : -drive;
     }
-    if (input.brake > 0) {
-      if (speed > 1.2) brake = T.brakeImpulse * input.brake;
-      else if (speed > -T.maxReverse) drive = -T.reverseForce * input.brake;
-    }
-    if (input.throttle > 0 && speed < -1) brake = T.brakeImpulse * input.throttle;
-    if (drive === 0 && brake === 0) brake = T.engineBrake;
+    this.driveForce = drive;
+    if (braking > 0) brake = T.brakeImpulse * braking;
+    // engine braking grows with rpm when the throttle is closed
+    if (drive === 0 && brake === 0) brake = this.gear === 0 ? 1 : T.engineBrake * (0.4 + (1.6 * engineRpm) / T.redline);
 
     const q = b.rotation();
     const t = b.translation();
@@ -260,18 +351,10 @@ export class Vehicle {
       z: fwd.z * kr + right.z * kp + up.z * yawT,
     }, true);
 
-    // simple gearbox for sound and HUD
-    const kmh = abs * 3.6;
-    const shifts = [0, 48, 80, 110, 140, 170, 999];
-    let g = 1;
-    while (g < 6 && kmh > shifts[g]) g++;
-    this.gear = speed < -0.5 ? -1 : g;
-    const lo = shifts[g - 1], hi = shifts[g] === 999 ? 220 : shifts[g];
-    const targetRpm = (g > 1 ? 3600 : 1500) + ((kmh - lo) / (hi - lo)) * (g > 1 ? 4000 : 5800);
-    const want = this.airborne && input.throttle > 0 ? 7600 : Math.max(900, Math.min(7600, targetRpm));
-    const blended = input.throttle > 0 ? Math.max(want, 2400 * input.throttle) : want;
-    this.rpm += (blended - this.rpm) * Math.min(1, dt * 9);
-    this.throttle = input.throttle;
+    // displayed / audible rpm follows the engine quickly; the limiter makes it bounce
+    const shown = this.limiter ? T.redline - Math.random() * 450 : engineRpm;
+    this.rpm += (shown - this.rpm) * Math.min(1, dt * 18);
+    this.throttle = pedal;
   }
 
   forward() { return rotate(this.body.rotation(), { x: 1, y: 0, z: 0 }); }

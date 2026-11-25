@@ -7,6 +7,10 @@ export class Input {
     this.steerKeys = 0;
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+      // Ctrl is the downshift key: stop Ctrl+S (save), Ctrl+R (reload), Ctrl+D (bookmark) … while driving.
+      // Ctrl+W cannot be blocked by a page (only in fullscreen with keyboard lock, see main.js).
+      const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
+      if ((e.ctrlKey || e.metaKey) && !typing && /^(Key[A-Z]|Digit\d|Space|Arrow)/.test(e.code)) e.preventDefault();
       if (!this.keys.has(e.code)) this.pressed.add(e.code);
       this.keys.add(e.code);
     });
@@ -47,7 +51,9 @@ export class Input {
       const edge = (i) => p.buttons[i] && p.buttons[i].pressed && !prev[i];
       if (edge(3)) actions.add('KeyR');
       if (edge(9)) actions.add('Enter');
-      if (edge(5)) actions.add('KeyC');
+      if (edge(5)) actions.add('ShiftRight'); // RB: shift up
+      if (edge(4)) actions.add('ControlRight'); // LB: shift down
+      if (edge(8)) actions.add('KeyC'); // View/Back: camera
       this.padButtonsPrev = p.buttons.map((b) => b.pressed);
       break;
     }

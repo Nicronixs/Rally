@@ -47,7 +47,9 @@ Danach den Workflow neu laufen lassen (Actions → GitHub Pages → Run workflow
 
 ## Steuerung
 
-W/S Gas/Bremse · A/D Lenken · Leertaste Handbremse · R zurück auf die Strecke · C Kamera (Cockpit, Verfolger, Motorhaube) · M Ton · B Aufschrieb · V Ansagen · Enter Neustart · N neue Strecke. Gamepad: RT/LT, linker Stick, A Handbremse, Y Zurücksetzen.
+W/S Gas/Bremse · A/D Lenken · Leertaste Handbremse · Umschalt hochschalten · Strg runterschalten (1 → N → R) · G Automatik/manuell · F Vollbild · R zurück auf die Strecke · C Kamera (Cockpit, Verfolger, Motorhaube) · M Ton · B Aufschrieb · V Ansagen · Enter Neustart · N neue Strecke. Gamepad: RT/LT, linker Stick, A Handbremse, RB/LB schalten, Y Zurücksetzen, View Kamera.
+
+**Schaltung:** Sequenzielles 6-Gang-Getriebe mit Drehzahlmesser und Schaltblitz (gelb ab 6500, rot blinkend am Begrenzer bei 7600 U/min). Standard ist manuell; G schaltet auf Automatik (dann wie früher: Bremse im Stand = rückwärts). Weil Strg+W im Browser den Tab schließt und eine Seite das nicht verhindern darf, am besten im Vollbild fahren (F) – dort sperrt das Spiel die Tastatur für sich.
 
 ## 3D-Modelle (Blender)
 
@@ -87,6 +89,7 @@ Das Spiel färbt die Materialien nach Namen ein (`Paint`, `Stripe`, `Accent`, `R
 | `src/effects.js`, `src/audio.js` | Staub, Motor- und Schottergeräusch |
 | `src/net.js` | Koop-Verbindung (PeerJS/WebRTC): Raum-Code, Nachrichten, Herzschlag |
 | `src/main.js` | Spielablauf, Kamera, HUD, Zeitmessung |
+| `tools/gearbox-test.mjs` | Beschleunigung 0–100, Höchstgeschwindigkeit und Schaltpunkte je Auto |
 | `tools/brake-test.mjs` | Bremsweg aus 100 km/h je Auto und Untergrund: `node tools/brake-test.mjs '{"brakeImpulse":90}'` |
 | `tools/crash-test.mjs` | Schaden bei Aufprall mit verschiedenen Geschwindigkeiten |
 | `tools/physics-test.mjs` | Fahrverhalten ohne Browser testen: `node tools/physics-test.mjs '{"rearGrip":0.9}'` |

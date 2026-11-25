@@ -80,7 +80,7 @@ export function referenceTime(stage, env) {
   return t * REF_FACTOR;
 }
 // calibrated so the reference roughly matches a tidy (not perfect) drive
-const REF_FACTOR = 1.08;
+const REF_FACTOR = 1.11; // raised from 1.08 with the real gearbox (about 3 % slower than before)
 
 function rivalStageTime(c, rally, stage, i, ref) {
   const rng = mulberry32(stageSeed(c, rally, stage) * 13 + i * 7919);

@@ -129,6 +129,7 @@ async function main() {
     splits: [],
     flipTimer: 0,
     camMode: Number(localStorage.getItem('rally.cam') || 0), // 0 cockpit, 1 chase, 2 bonnet
+    manual: localStorage.getItem('rally.gearbox') !== 'auto', // manual gearbox unless switched to automatic
     role: 'solo', // solo, driver, codriver
     best: Number(localStorage.getItem(bestKey)) || null,
     roomCode: sessionStorage.getItem('rally.hostCode'),
@@ -144,8 +145,13 @@ async function main() {
     notebook.sync(i);
   }
 
+  let fullscreenHintShown = false;
   function restart() {
     placeAtIndex(stage.startIndex - 4);
+    if (game.manual && !document.fullscreenElement && !fullscreenHintShown && !AUTOPILOT) {
+      fullscreenHintShown = true;
+      setTimeout(() => toast('Tipp: F = Vollbild, dann schließt Strg+W nicht aus Versehen den Tab', 4), 300);
+    }
     game.state = 'countdown';
     game.countdown = 3.5;
     game.time = 0;
@@ -645,6 +651,16 @@ async function main() {
   let toastTimer = 0;
   function toast(text, secs = 1.6) { $('toast').textContent = text; toastTimer = secs; }
 
+  // Fullscreen with keyboard lock: the only way a page may keep Ctrl+W (close tab) for itself.
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) { await document.exitFullscreen(); return; }
+      await document.documentElement.requestFullscreen();
+      if (navigator.keyboard && navigator.keyboard.lock) await navigator.keyboard.lock();
+      toast('Vollbild – Esc gedrückt halten zum Verlassen', 2.5);
+    } catch { toast('Vollbild nicht möglich', 1.5); }
+  }
+
   function onImpact(sev) {
     if (sev <= 0) return;
     car.setDamage(vehicle.damage);
@@ -673,6 +689,18 @@ async function main() {
 
     // one-shot actions
     if (inp.actions.has('KeyM')) audio.toggleMute();
+    if (inp.actions.has('KeyF')) toggleFullscreen();
+    if (!isCo && inp.actions.has('KeyG')) {
+      game.manual = !game.manual;
+      localStorage.setItem('rally.gearbox', game.manual ? 'manual' : 'auto');
+      toast(game.manual ? 'Schaltung: manuell (Umschalt / Strg)' : 'Schaltung: Automatik', 2);
+    }
+    vehicle.manual = game.manual && !AUTOPILOT && !isCo;
+    const canShift = !isCo && vehicle.manual && (game.state === 'running' || game.state === 'countdown');
+    if (canShift && (inp.actions.has('ShiftLeft') || inp.actions.has('ShiftRight'))) vehicle.shiftUp();
+    if (canShift && (inp.actions.has('ControlLeft') || inp.actions.has('ControlRight'))) {
+      if (!vehicle.shiftDown() && vehicle.gear > 1) toast('Drehzahl zu hoch zum Runterschalten', 1);
+    }
     if (inp.actions.has('KeyB') && !isCo) notebook.toggleBook();
     if (inp.actions.has('KeyV') && game.role === 'solo') notebook.toggleVoice();
     if (inp.actions.has('KeyC')) {
@@ -682,7 +710,8 @@ async function main() {
     if (inp.actions.has('Enter') && overlayOpen && enterAction) enterAction();
     else if (inp.actions.has('Enter') && MODE === 'free' && !isCo && game.state !== 'intro') restart();
     if (inp.actions.has('KeyN') && MODE === 'free' && !isCo && !overlayOpen) { go(freeQuery(Math.floor(Math.random() * 99999) + 1, ENV.id, CAR.id, true)); return; }
-    if (inp.actions.has('Escape') && !isCo && game.state !== 'intro') {
+    // in fullscreen the browser wants Esc held to leave it, so Esc does not open the menu there
+    if (inp.actions.has('Escape') && !document.fullscreenElement && !isCo && game.state !== 'intro') {
       if (MODE === 'champ' && game.state === 'running' && !confirm('Prüfung abbrechen? Der Fortschritt dieser Prüfung geht verloren.')) { /* stay */ } else go('');
     }
     if (!isCo && inp.actions.has('KeyR') && (game.state === 'running' || game.state === 'countdown')) {
@@ -808,8 +837,13 @@ async function main() {
 
     // HUD
     $('speed').textContent = Math.round(sp * 3.6);
-    $('gear').textContent = vehicle.gear < 0 ? 'R' : String(vehicle.gear);
-    $('rpm-fill').style.width = `${Math.min(100, (vehicle.rpm / 7600) * 100)}%`;
+    $('gear').textContent = vehicle.gear < 0 ? 'R' : vehicle.gear === 0 ? 'N' : String(vehicle.gear);
+    $('gear-mode').textContent = vehicle.manual ? 'MAN' : 'AUTO';
+    $('rpm-fill').style.width = `${Math.min(100, (vehicle.rpm / 7800) * 100)}%`;
+    $('rpm-text').textContent = `${(vehicle.rpm / 1000).toFixed(1)}`;
+    // shift light: yellow from 6500 rpm, flashing red at the limiter
+    const shiftLight = vehicle.rpm > 7300 ? (Math.floor(now / 80) % 2 ? 'hot' : 'flash') : vehicle.rpm > 6500 ? 'warn' : '';
+    $('speedo').dataset.shift = shiftLight;
     $('timer').textContent = formatTime(isCo ? game.time : game.time + game.penalty);
     const total = stage.finishIndex - stage.startIndex;
     const done = Math.max(0, Math.min(total, ti - stage.startIndex));
