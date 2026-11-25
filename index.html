@@ -15,6 +15,11 @@
       <div id="splits"></div>
     </div>
     <div id="progress-box">
+      <div id="damage" class="hidden">
+        <div class="dmg-mini"><span>Motor</span><div><i id="dmg-engine"></i></div></div>
+        <div class="dmg-mini"><span>Fahrwerk</span><div><i id="dmg-suspension"></i></div></div>
+        <div class="dmg-mini"><span>Karosserie</span><div><i id="dmg-body"></i></div></div>
+      </div>
       <div id="progress-label">Noch 0,0 km</div>
       <div id="progress-bar"><div id="progress-fill"></div></div>
     </div>
@@ -30,6 +35,7 @@
     </div>
     <div id="coop-status"></div>
     <div id="message"></div>
+    <div id="toast"></div>
     <div id="hint"></div>
   </div>
 
@@ -37,8 +43,9 @@
     <div class="panel" id="panel">
       <h1>Rally Koop</h1>
       <p class="sub" id="loading">Lade Physik…</p>
-      <div id="intro" class="hidden">
-        <p class="sub" id="stage-info"></p>
+      <div id="screen" class="hidden"></div>
+      <details id="help" class="hidden">
+        <summary>Steuerung</summary>
         <table class="keys">
           <tr><td>W / ↑</td><td>Gas</td></tr>
           <tr><td>S / ↓</td><td>Bremse / Rückwärts</td></tr>
@@ -49,34 +56,12 @@
           <tr><td>M</td><td>Ton an/aus</td></tr>
           <tr><td>B</td><td>Aufschrieb ein/aus</td></tr>
           <tr><td>V</td><td>Beifahrer-Ansagen an/aus</td></tr>
-          <tr><td>Enter</td><td>Etappe neu starten</td></tr>
-          <tr><td>N</td><td>Neue Strecke</td></tr>
+          <tr><td>Enter</td><td>Neustart (freie Fahrt)</td></tr>
+          <tr><td>N</td><td>Neue Strecke (freie Fahrt)</td></tr>
+          <tr><td>Esc</td><td>Hauptmenü</td></tr>
         </table>
         <p class="small">Gamepad: RT Gas · LT Bremse · A Handbremse · Y Zurücksetzen</p>
-        <div id="menu">
-          <button id="btn-solo" class="btn primary">Allein fahren <span class="small">(Enter)</span></button>
-          <div class="menu-coop">
-            <div class="menu-col">
-              <div class="menu-label">Koop · Fahrer</div>
-              <button id="btn-host" class="btn">Raum erstellen</button>
-            </div>
-            <div class="menu-col">
-              <div class="menu-label">Koop · Beifahrer</div>
-              <div class="join-row">
-                <input id="join-code" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" />
-                <button id="btn-join" class="btn">Beitreten</button>
-              </div>
-            </div>
-          </div>
-          <div id="lobby" class="hidden">
-            <div id="room-code"></div>
-            <div id="lobby-status"></div>
-            <button id="btn-start" class="btn primary hidden">Etappe starten</button>
-          </div>
-          <p id="menu-error"></p>
-        </div>
-      </div>
-      <div id="result" class="hidden"></div>
+      </details>
     </div>
   </div>
 

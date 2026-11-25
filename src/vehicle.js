@@ -41,8 +41,6 @@ export const TUNING = {
   yawHoldHandbrake: 0.25,
 };
 
-const T = TUNING;
-const DRIVEN = [true, true, true, true];
 
 function rotate(q, v) {
   // rotate vector v by quaternion q
@@ -57,19 +55,27 @@ function rotate(q, v) {
   };
 }
 
+const IMPACT_THRESHOLD = 60000; // newtons; below this a contact does no harm
+
 export class Vehicle {
-  constructor(world) {
+  // overrides: per-car tuning (see cars.js)
+  constructor(world, overrides = {}) {
     this.world = world;
+    this.T = { ...TUNING, ...overrides };
+    const T = this.T;
     const body = world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 5, 0).setCanSleep(false).setCcdEnabled(true));
     const h = T.halfExtents;
     const main = RAPIER.ColliderDesc.cuboid(h.x, h.y, h.z)
       .setMassProperties(T.mass, { x: 0, y: T.comY, z: 0 }, T.inertia, { w: 1, x: 0, y: 0, z: 0 })
       .setFriction(0.35).setRestitution(0.05);
-    world.createCollider(main, body);
+    // collisions report their force so we can turn hard hits into damage
+    main.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(IMPACT_THRESHOLD);
+    this.colliders = new Set([world.createCollider(main, body).handle]);
     const cabin = RAPIER.ColliderDesc.cuboid(0.95, 0.27, 0.72).setTranslation(-0.45, 0.6, 0)
-      .setDensity(0).setFriction(0.35);
-    world.createCollider(cabin, body);
+      .setDensity(0).setFriction(0.35)
+      .setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(IMPACT_THRESHOLD);
+    this.colliders.add(world.createCollider(cabin, body).handle);
     this.body = body;
 
     const vc = world.createVehicleController(body);
@@ -100,6 +106,38 @@ export class Vehicle {
     this.wheelSurface = ['gravel', 'gravel', 'gravel', 'gravel'];
     this.airborne = false;
     this.slipAngle = 0;
+    this.damage = { engine: 0, suspension: 0, body: 0 };
+    this.pull = Math.random() < 0.5 ? -1 : 1; // which way a bent suspension pulls
+    this.lastImpact = 0;
+  }
+
+  setDamage(d) {
+    this.damage = { engine: d.engine || 0, suspension: d.suspension || 0, body: d.body || 0 };
+  }
+
+  // Called after a physics step in which the chassis hit something.
+  // Severity comes from the sudden change of velocity in that step (contact forces of rigid bodies are not meaningful).
+  // dir: world direction of the contact force
+  applyImpact(dir) {
+    if (this.impactStep === this.stepCount) return 0; // once per step
+    this.impactStep = this.stepCount;
+    const v = this.body.linvel(), p = this.velBefore || v;
+    const dv = Math.hypot(v.x - p.x, v.y - p.y, v.z - p.z);
+    const sev = (dv - 3) / 22;
+    if (sev <= 0) return 0;
+    const q = this.body.rotation();
+    const f = rotate(q, { x: 1, y: 0, z: 0 }), r = rotate(q, { x: 0, y: 0, z: 1 }), u = rotate(q, { x: 0, y: 1, z: 0 });
+    const ax = Math.abs(dir.x * f.x + dir.y * f.y + dir.z * f.z);
+    const az = Math.abs(dir.x * r.x + dir.y * r.y + dir.z * r.z);
+    const ay = Math.abs(dir.x * u.x + dir.y * u.y + dir.z * u.z);
+    const sum = ax + ay + az || 1;
+    const d = this.damage;
+    // frontal hits hurt the engine, side hits the suspension, everything the body
+    d.engine = Math.min(1, d.engine + sev * 0.9 * (ax / sum));
+    d.suspension = Math.min(1, d.suspension + sev * 0.9 * (az / sum) + sev * 0.25 * (ay / sum));
+    d.body = Math.min(1, d.body + sev * 0.8);
+    this.lastImpact = sev;
+    return sev;
   }
 
   place(x, y, z, yaw) {
@@ -114,7 +152,11 @@ export class Vehicle {
   // input: { throttle 0..1, brake 0..1, steer -1..1 (+ = left), handbrake bool }
   // surfaceAt(x, z) -> { grip, rolling, kind }
   step(dt, input, surfaceAt) {
+    const T = this.T;
+    const dmg = this.damage;
     const vc = this.vc, b = this.body;
+    this.stepCount = (this.stepCount || 0) + 1;
+    this.velBefore = b.linvel();
     const speed = vc.currentVehicleSpeed();
     this.speed = speed;
     const abs = Math.abs(speed);
@@ -126,13 +168,15 @@ export class Vehicle {
     const rate = (Math.sign(target - this.steer) !== Math.sign(this.steer) || target === 0) ? T.steerReturn : T.steerRate;
     const ds = target - this.steer;
     this.steer += Math.sign(ds) * Math.min(Math.abs(ds), rate * dt * Math.max(0.5, maxSteer));
-    vc.setWheelSteering(0, this.steer);
-    vc.setWheelSteering(1, this.steer);
+    // a damaged suspension pulls to one side
+    const pull = this.pull * 0.05 * dmg.suspension;
+    vc.setWheelSteering(0, this.steer + pull);
+    vc.setWheelSteering(1, this.steer + pull);
 
     // drive & brakes
     let drive = 0, brake = 0;
     if (input.throttle > 0 && speed > -1) {
-      drive = Math.min(T.maxDriveForce, T.power / Math.max(abs, 1)) * input.throttle;
+      drive = Math.min(T.maxDriveForce, (T.power * (1 - 0.5 * dmg.engine)) / Math.max(abs, 1)) * input.throttle;
     }
     if (input.brake > 0) {
       if (speed > 1.2) brake = T.brakeImpulse * input.brake;
@@ -146,9 +190,9 @@ export class Vehicle {
     for (let i = 0; i < 4; i++) {
       const front = i < 2;
       const share = front ? T.frontDriveShare : 1 - T.frontDriveShare;
-      let f = DRIVEN[i] ? drive * share * 0.5 : 0;
+      let f = drive * share * 0.5;
       let br = brake;
-      let grip = front ? T.frontGrip : T.rearGrip;
+      let grip = (front ? T.frontGrip : T.rearGrip) * (1 - 0.28 * dmg.suspension);
       if (input.handbrake && !front) { f = 0; br = T.handbrakeImpulse; grip *= T.handbrakeGrip; }
       // surface under the wheel
       const wp = rotate(q, this.wheelPositions[i]);

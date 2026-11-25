@@ -131,7 +131,16 @@ export function buildCarModel({ color = 0xf2f2f2, stripe = 0x1f5fbf, accent = 0x
     glassHouse.visible = !on;
   }
 
-  return { root, wheels, steeringWheel: cockpit.steeringWheel, setCockpitView, headPosition: cockpit.head };
+  // damage: dirty, scratched paint and a lost rear wing
+  const cleanPaint = paint.color.clone();
+  const grime = new THREE.Color(0x4a4036);
+  function setDamage(d) {
+    paint.color.copy(cleanPaint).lerp(grime, Math.min(0.6, d.body * 0.6));
+    paint.roughness = 0.35 + d.body * 0.5;
+    wing.visible = d.body < 0.65;
+  }
+
+  return { root, wheels, steeringWheel: cockpit.steeringWheel, setCockpitView, setDamage, headPosition: cockpit.head };
 }
 
 // Interior seen from the driver's seat (left-hand drive: driver on the -Z side).

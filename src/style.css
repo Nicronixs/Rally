@@ -88,3 +88,58 @@ body.codriver #speedo { transform: scale(0.8); transform-origin: bottom right; }
 .keys tbody { display: grid; grid-template-columns: auto auto auto auto; column-gap: 4px; }
 .keys tr { display: contents; }
 .keys td { padding: 2px 8px; font-size: 15px; }
+
+/* ---------- stage 4: menu, championship, damage ---------- */
+.panel { max-width: min(860px, 96vw); }
+#screen { margin-top: 6px; }
+#help { margin-top: 14px; text-align: left; }
+#help summary { cursor: pointer; opacity: 0.75; text-align: center; }
+.tabs { display: flex; gap: 6px; justify-content: center; margin: 6px 0 14px; }
+.tab { font: inherit; font-weight: 700; color: #cfd7e3; background: transparent; border: 1px solid #44536a; border-radius: 20px; padding: 6px 16px; cursor: pointer; }
+.tab.active { background: #ffd400; color: #15191f; border-color: #ffd400; }
+.label { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin: 14px 0 6px; text-align: left; }
+.cards { display: flex; gap: 10px; }
+.card { flex: 1; text-align: left; font: inherit; color: #fff; background: #1d2633; border: 2px solid #33404f; border-radius: 10px; padding: 10px; cursor: pointer; }
+.card.selected { border-color: #ffd400; background: #262f1d; }
+.card-swatch { height: 8px; border-radius: 4px; margin-bottom: 8px; }
+.card-title { font-weight: 800; font-size: 17px; }
+.card-sub { font-size: 13px; color: #ffd400; margin: 2px 0 4px; }
+.card-text { font-size: 13px; opacity: 0.8; }
+.env-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { flex: 1; font: inherit; font-weight: 700; color: #fff; background: #1d2633; border: 2px solid #33404f; border-radius: 10px; padding: 8px; cursor: pointer; }
+.chip span { display: block; font-size: 12px; font-weight: 400; opacity: 0.75; }
+.chip.selected { border-color: #ffd400; }
+.free-row { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 16px; }
+.free-row span { margin-right: auto; opacity: 0.8; }
+.rally-list { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; font-weight: 700; }
+#m-champ-continue { width: 100%; margin-bottom: 4px; }
+#m-champ-new { width: 100%; margin-top: 12px; }
+.btn.ghost { background: transparent; border-color: transparent; opacity: 0.7; margin-top: 8px; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.room-code-small { margin-bottom: 8px; }
+.room-code-small b { color: #ffd400; letter-spacing: 3px; font-size: 20px; }
+.champ-head { font-size: 28px; font-weight: 900; margin-top: 4px; }
+.two-col { display: flex; gap: 18px; }
+.two-col > div { flex: 1; }
+.standings { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 15px; }
+.standings td { padding: 3px 6px; text-align: left; white-space: nowrap; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.standings td:nth-child(3), .standings td:nth-child(4) { text-align: right; }
+.standings tr.me td { color: #ffd400; font-weight: 800; }
+.dmg-row { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
+.dmg-row span { width: 90px; text-align: left; }
+.dmg-row b { width: 44px; text-align: right; }
+.dmg-bar { flex: 1; height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px; overflow: hidden; }
+.dmg-bar div { height: 100%; }
+.svc { margin-top: 12px; text-align: left; }
+.svc-row { display: flex; gap: 10px; align-items: center; padding: 6px 4px; cursor: pointer; }
+.svc-row span { margin-left: auto; opacity: 0.8; }
+.svc-row.ok { opacity: 0.6; cursor: default; }
+#svc-budget { font-weight: 700; }
+#svc-budget.over { color: #ff7a6b; }
+#damage { margin-bottom: 10px; }
+.dmg-mini { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 2px 0; }
+.dmg-mini span { width: 78px; }
+.dmg-mini div { flex: 1; height: 6px; background: rgba(10, 14, 20, 0.5); border-radius: 3px; overflow: hidden; }
+.dmg-mini i { display: block; height: 100%; width: 0; }
+#toast { position: absolute; top: 24%; left: 50%; transform: translateX(-50%); font-size: 28px; font-weight: 800; color: #ffcf3a; }
+#toast:empty { display: none; }

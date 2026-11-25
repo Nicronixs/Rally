@@ -3,7 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { generateStage } from './track.js';
 import { buildTerrain } from './terrain.js';
 import { buildRoad, buildTrees, buildGates } from './road.js';
-import { Vehicle, TUNING, rotate } from './vehicle.js';
+import { Vehicle, TUNING } from './vehicle.js';
 import { buildCarModel } from './carModel.js';
 import { Dust } from './effects.js';
 import { CarAudio } from './audio.js';
@@ -11,19 +11,40 @@ import { Input } from './input.js';
 import { buildPacenotes } from './pacenotes.js';
 import { PacenoteUI } from './pacenoteUI.js';
 import { hostRoom, joinRoom, normalizeCode } from './net.js';
+import { getEnvironment } from './environments.js';
+import { getCar } from './cars.js';
+import {
+  RALLIES, RESET_PENALTY, SERVICE_MINUTES, loadChampionship, saveChampionship, newChampionship,
+  stageSeed, referenceTime, recordStage, repairCost,
+} from './championship.js';
+import {
+  formatTime, menuScreen, champIntroScreen, champResultScreen, serviceScreen, finalScreen, barColor,
+} from './screens.js';
 
 const $ = (id) => document.getElementById(id);
 // let the loading text paint; the timeout keeps loading going in background tabs (no animation frames there)
 const nextFrame = () => new Promise((r) => { requestAnimationFrame(() => r()); setTimeout(r, 60); });
 const params = new URLSearchParams(location.search);
-const SEED = Number(params.get('seed')) || 7;
 const AUTOPILOT = params.has('autopilot');
+const JOIN = params.get('join');
 
-function formatTime(t) {
-  const m = Math.floor(t / 60);
-  const s = t - m * 60;
-  return `${m}:${s.toFixed(2).padStart(5, '0')}`;
+// ---------- what to load: championship stage, free drive or co-driver view ----------
+const CHAMP = params.has('champ') ? loadChampionship() : null;
+const champActive = !!(CHAMP && !CHAMP.finished) && !JOIN;
+let SEED, ENV, CAR;
+if (champActive) {
+  SEED = stageSeed(CHAMP);
+  ENV = getEnvironment(RALLIES[CHAMP.rally].env);
+  CAR = getCar(CHAMP.car);
+} else {
+  SEED = Number(params.get('seed')) || 7;
+  ENV = getEnvironment(params.get('env') || 'forest');
+  CAR = getCar(params.get('car') || localStorage.getItem('rally.car') || 'falke');
 }
+const MODE = JOIN ? 'codriver' : champActive ? 'champ' : params.has('champ') && CHAMP && CHAMP.finished ? 'final' : 'free';
+
+function go(query) { location.search = query; }
+function freeQuery(seed, env, car, start) { return `?seed=${seed}&env=${env}&car=${car}${start ? '&go=1' : ''}`; }
 
 async function main() {
   await RAPIER.init();
@@ -41,26 +62,24 @@ async function main() {
   renderer.toneMappingExposure = 1.05;
 
   const scene = new THREE.Scene();
-  const horizon = new THREE.Color(0xc9d8e4);
+  const horizon = new THREE.Color(ENV.sky.horizon);
   scene.background = horizon;
-  scene.fog = new THREE.Fog(horizon, 90, 620);
-
+  scene.fog = new THREE.Fog(horizon, ENV.sky.fogNear, ENV.sky.fogFar);
   const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 5000);
 
-  // sky dome
   const sky = new THREE.Mesh(
     new THREE.SphereGeometry(3000, 32, 16),
     new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { top: { value: new THREE.Color(0x3f78c0) }, bottom: { value: horizon } },
+      uniforms: { top: { value: new THREE.Color(ENV.sky.top) }, bottom: { value: horizon } },
       vertexShader: 'varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
       fragmentShader: 'uniform vec3 top; uniform vec3 bottom; varying vec3 vPos; void main(){ float h = clamp(normalize(vPos).y * 2.2, 0.0, 1.0); gl_FragColor = vec4(mix(bottom, top, pow(h, 0.7)), 1.0);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}',
     }));
   sky.renderOrder = -1;
   scene.add(sky);
 
-  scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x5a5a3a, 1.1));
-  const sun = new THREE.DirectionalLight(0xfff1d8, 2.6);
+  scene.add(new THREE.HemisphereLight(ENV.light.sky, ENV.light.ground, ENV.light.hemi));
+  const sun = new THREE.DirectionalLight(ENV.light.sun, ENV.light.sunIntensity);
   const sunDir = new THREE.Vector3(0.45, 0.8, 0.35).normalize();
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -73,32 +92,35 @@ async function main() {
   // ---------- world ----------
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
   world.timestep = 1 / 60;
-  const stage = generateStage(SEED);
+  const events = new RAPIER.EventQueue(true);
+  const stage = generateStage(SEED, ENV);
   $('loading').textContent = 'Gelände wird gebaut…';
   await nextFrame();
   const terrain = buildTerrain(stage, world, scene);
-  buildRoad(stage, scene);
-  $('loading').textContent = 'Wald wird gepflanzt…';
+  buildRoad(stage, scene, ENV);
+  $('loading').textContent = 'Landschaft wird gestaltet…';
   await nextFrame();
-  buildTrees(stage, terrain, world, scene);
+  buildTrees(stage, terrain, world, scene, ENV);
   buildGates(stage, scene);
 
-  const vehicle = new Vehicle(world);
-  const car = buildCarModel();
+  const vehicle = new Vehicle(world, CAR.tuning);
+  const car = buildCarModel(CAR.livery);
   scene.add(car.root);
+  if (champActive) vehicle.setDamage(CHAMP.damage);
+  car.setDamage(vehicle.damage);
   const dust = new Dust(scene);
   const audio = new CarAudio();
   const input = new Input();
   const pacenotes = buildPacenotes(stage);
   const notebook = new PacenoteUI(pacenotes);
+  const stageKm = ((stage.finishIndex - stage.startIndex) / 1000).toFixed(2).replace('.', ',');
 
   // ---------- game state ----------
-  const stageKm = ((stage.finishIndex - stage.startIndex) / 1000).toFixed(2).replace('.', ',');
-  const bestKey = `rally.best.${SEED}`;
-  const bestSplitsKey = `rally.bestSplits.${SEED}`;
+  const bestKey = `rally.best.${ENV.id}.${CAR.id}.${SEED}`;
   const game = {
     state: 'intro', // intro, countdown, running, finished
     time: 0,
+    penalty: 0,
     countdown: 0,
     trackIndex: stage.startIndex,
     splits: [],
@@ -106,7 +128,7 @@ async function main() {
     camMode: Number(localStorage.getItem('rally.cam') || 0), // 0 cockpit, 1 chase, 2 bonnet
     role: 'solo', // solo, driver, codriver
     best: Number(localStorage.getItem(bestKey)) || null,
-    bestSplits: JSON.parse(localStorage.getItem(bestSplitsKey) || 'null'),
+    roomCode: sessionStorage.getItem('rally.hostCode'),
   };
 
   function placeAtIndex(i) {
@@ -124,42 +146,158 @@ async function main() {
     game.state = 'countdown';
     game.countdown = 3.5;
     game.time = 0;
+    game.penalty = 0;
     game.splits = [];
+    if (MODE === 'free') vehicle.setDamage({});
+    car.setDamage(vehicle.damage);
     $('splits').innerHTML = '';
-    $('result').classList.add('hidden');
-    $('overlay').classList.add('hidden');
+    hideOverlay();
     $('hud').classList.remove('hidden');
-    if (game.role === 'driver' && link) link.send({ t: 'restart' });
+    if (link) link.send({ t: 'restart' });
   }
 
   function finish() {
     game.state = 'finished';
-    const t = game.time;
-    let line = '';
+    const t = game.time + game.penalty;
+    if (MODE === 'champ') {
+      const rally = CHAMP.rally, stg = CHAMP.stage;
+      const ref = referenceTime(stage, ENV);
+      const { rallyDone } = recordStage(CHAMP, t, ref, vehicle.damage);
+      const res = champResultScreen(CHAMP, rally, stg, rallyDone, game.penalty);
+      if (link) link.send({ t: 'finish', time: t, line: `Platz ${res.pos} auf dieser Prüfung` });
+      setTimeout(() => showChampResult(res.html, rallyDone), 1800);
+      return;
+    }
+    let line;
     if (game.best === null || t < game.best) {
-      line = game.best === null ? 'Erste Zeit auf dieser Strecke!' : `Neue Bestzeit! (−${(game.best - t).toFixed(2)} s)`;
+      line = game.best === null ? 'Erste Zeit mit diesem Auto auf dieser Strecke!' : `Neue Bestzeit! (−${(game.best - t).toFixed(2)} s)`;
       game.best = t;
-      game.bestSplits = game.splits.slice();
       localStorage.setItem(bestKey, String(t));
-      localStorage.setItem(bestSplitsKey, JSON.stringify(game.bestSplits));
     } else {
       line = `Bestzeit ${formatTime(game.best)} (+${(t - game.best).toFixed(2)} s)`;
     }
-    if (game.role === 'driver' && link) link.send({ t: 'finish', time: t, line });
-    showResult(t, line);
+    if (link) link.send({ t: 'finish', time: t, line });
+    setTimeout(() => showResult(t, line), 1800);
   }
 
+  // ---------- screens ----------
+  function showOverlay(html) {
+    $('loading').classList.add('hidden');
+    $('screen').innerHTML = html;
+    $('screen').classList.remove('hidden');
+    $('overlay').classList.remove('hidden');
+  }
+  function hideOverlay() { $('overlay').classList.add('hidden'); }
+  let enterAction = null; // what Enter does on the current screen
+
   function showResult(t, line) {
-    setTimeout(() => {
-      if (game.state !== 'finished') return;
-      $('intro').classList.add('hidden');
-      $('loading').classList.add('hidden');
-      const r = $('result');
-      r.innerHTML = `<p class="sub">Etappe beendet</p><div class="result-time">${formatTime(t)}</div>
-        <div class="result-best">${line}</div><p class="small">${game.role === 'codriver' ? 'Der Fahrer startet die nächste Fahrt' : game.role === 'driver' ? 'Enter = nochmal fahren' : 'Enter = nochmal fahren · N = neue Strecke'}</p>`;
-      r.classList.remove('hidden');
-      $('overlay').classList.remove('hidden');
-    }, 1800);
+    if (game.state !== 'finished') return;
+    const hint = game.role === 'codriver' ? 'Der Fahrer startet die nächste Fahrt'
+      : 'Enter = nochmal fahren · N = neue Strecke · Esc = Menü';
+    showOverlay(`<p class="sub">Etappe beendet</p><div class="result-time">${formatTime(t)}</div>
+      <div class="result-best">${line}</div><p class="small">${hint}</p>`);
+    enterAction = game.role === 'codriver' ? null : restart;
+  }
+
+  function showChampResult(html, rallyDone) {
+    showOverlay(html);
+    const next = () => {
+      if (CHAMP.finished) go('?champ=1');
+      else if (rallyDone) go('?champ=1');
+      else showService();
+    };
+    $('r-next').onclick = next;
+    enterAction = next;
+  }
+
+  function showService() {
+    showOverlay(serviceScreen(CHAMP));
+    const cost = repairCost(CHAMP.damage);
+    const boxes = [...document.querySelectorAll('#screen input[data-part]')];
+    const update = () => {
+      const used = boxes.filter((b) => b.checked).reduce((s, b) => s + cost[b.dataset.part], 0);
+      const el = $('svc-budget');
+      el.textContent = `Benötigt: ${used} von ${SERVICE_MINUTES} Minuten`;
+      el.classList.toggle('over', used > SERVICE_MINUTES);
+      $('s-go').disabled = used > SERVICE_MINUTES;
+      return used <= SERVICE_MINUTES;
+    };
+    boxes.forEach((b) => { b.onchange = update; });
+    // pre-select what fits, most important first
+    let budget = SERVICE_MINUTES;
+    for (const b of boxes) { b.checked = cost[b.dataset.part] <= budget; if (b.checked) budget -= cost[b.dataset.part]; }
+    update();
+    const goOn = () => {
+      if (!update()) return;
+      boxes.forEach((b) => { if (b.checked) CHAMP.damage[b.dataset.part] = 0; });
+      saveChampionship(CHAMP);
+      go('?champ=1&go=1');
+    };
+    $('s-go').onclick = goOn;
+    enterAction = goOn;
+  }
+
+  function wireCards(root, onPick) {
+    root.querySelectorAll('[data-car]').forEach((el) => {
+      el.onclick = () => {
+        root.querySelectorAll('[data-car]').forEach((x) => x.classList.toggle('selected', x.dataset.car === el.dataset.car));
+        onPick(el.dataset.car);
+      };
+    });
+  }
+
+  function showMenu() {
+    let pickCar = CAR.id, pickEnv = ENV.id, pickSeed = SEED;
+    const saved = loadChampionship();
+    showOverlay(menuScreen({ champ: saved, car: pickCar, env: pickEnv, seed: pickSeed, hostCode: game.role === 'driver' ? game.roomCode : null }));
+    $('help').classList.remove('hidden');
+    const scr = $('screen');
+    scr.querySelectorAll('.tab').forEach((t) => {
+      t.onclick = () => {
+        scr.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === t));
+        scr.querySelectorAll('section[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== t.dataset.tab));
+        sessionStorage.setItem('rally.tab', t.dataset.tab);
+      };
+    });
+    const lastTab = sessionStorage.getItem('rally.tab');
+    if (lastTab) { const t = scr.querySelector(`.tab[data-tab="${lastTab}"]`); if (t) t.onclick(); }
+    wireCards(scr, (id) => { pickCar = id; localStorage.setItem('rally.car', id); scr.querySelectorAll('[data-car]').forEach((x) => x.classList.toggle('selected', x.dataset.car === id)); });
+    scr.querySelectorAll('[data-env]').forEach((el) => {
+      el.onclick = () => {
+        pickEnv = el.dataset.env;
+        scr.querySelectorAll('[data-env]').forEach((x) => x.classList.toggle('selected', x === el));
+      };
+    });
+    const startFree = () => {
+      if (pickEnv === ENV.id && pickCar === CAR.id && pickSeed === SEED && MODE === 'free') { audio.start(); restart(); }
+      else go(freeQuery(pickSeed, pickEnv, pickCar, true));
+    };
+    $('m-free-go').onclick = startFree;
+    $('m-free-random').onclick = () => go(freeQuery(Math.floor(Math.random() * 99999) + 1, pickEnv, pickCar, false) + '&menu=free');
+    $('m-champ-new').onclick = () => {
+      if (saved && !saved.finished && !confirm('Die laufende Meisterschaft wird überschrieben. Neu starten?')) return;
+      newChampionship(pickCar);
+      go('?champ=1');
+    };
+    if ($('m-champ-continue')) $('m-champ-continue').onclick = () => go('?champ=1');
+    if ($('m-host')) $('m-host').onclick = () => { startHosting(null); };
+    if ($('m-host-stop')) $('m-host-stop').onclick = () => { sessionStorage.removeItem('rally.hostCode'); location.reload(); };
+    $('btn-join').onclick = () => joinGame($('join-code').value);
+    $('join-code').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') joinGame($('join-code').value); });
+    enterAction = () => {
+      const tab = scr.querySelector('.tab.active').dataset.tab;
+      if (tab === 'free') startFree();
+      else if (tab === 'champ') ($('m-champ-continue') || $('m-champ-new')).click();
+    };
+  }
+
+  function showChampIntro() {
+    showOverlay(champIntroScreen(CHAMP, CAR.name, `${ENV.name} (${ENV.surfaceName})`, stageKm));
+    $('help').classList.remove('hidden');
+    const start = () => { audio.start(); restart(); };
+    $('c-go').onclick = start;
+    $('c-menu').onclick = () => go('');
+    enterAction = start;
   }
 
   // ---------- interpolation between physics steps ----------
@@ -172,11 +310,12 @@ async function main() {
   }
   function copySnapshot() { prevPos.copy(currPos); prevQuat.copy(currQuat); }
 
+  const onRoad = { grip: ENV.grip.road, rolling: 0, kind: 'gravel' };
+  const offRoad = { grip: ENV.grip.off, rolling: ENV.grip.offRolling, kind: 'grass' };
   function surfaceAt(x, z) {
     const i = stage.nearestTracked(x, z, game.trackIndex);
     const d = i >= 0 ? Math.hypot(stage.xs[i] - x, stage.zs[i] - z) : 99;
-    if (d < stage.halfWidth + 0.4) return { grip: 1, rolling: 0, kind: 'gravel' };
-    return { grip: 0.8, rolling: 6, kind: 'grass' };
+    return d < stage.halfWidth + 0.4 ? onRoad : offRoad;
   }
 
   function autopilot() {
@@ -184,33 +323,19 @@ async function main() {
     const look = Math.min(stage.count - 1, game.trackIndex + 12 + Math.floor(Math.abs(vehicle.speed) * 0.6));
     const dx = stage.xs[look] - t.x, dz = stage.zs[look] - t.z;
     const f = vehicle.forward();
-    const cross = f.x * dz - f.z * dx; // >0 means target is to the right
+    const cross = f.x * dz - f.z * dx;
     const ang = Math.atan2(-cross, f.x * dx + f.z * dz);
     let maxC = 0;
     for (let k = game.trackIndex; k < Math.min(stage.count, game.trackIndex + 60); k++) maxC = Math.max(maxC, Math.abs(stage.curv[k]));
-    const safe = Math.sqrt((0.85 * 9.81) / Math.max(maxC, 0.003));
+    const safe = Math.sqrt((0.85 * ENV.grip.road * 9.81) / Math.max(maxC, 0.003));
     const v = vehicle.speed;
     return { throttle: v < safe ? 1 : 0, brake: v > safe + 3 ? 1 : 0, steer: Math.max(-1, Math.min(1, ang * 2.2)), handbrake: false };
   }
 
-  // ---------- intro ----------
-  $('loading').textContent = '';
-  $('stage-info').textContent = `Etappe „Waldschotter“ · ${stageKm} km · Strecke #${SEED}` +
-    (game.best ? ` · Bestzeit ${formatTime(game.best)}` : '');
-  $('intro').classList.remove('hidden');
-  placeAtIndex(stage.startIndex - 4);
-
-  // ---------- menu & co-op ----------
+  // ---------- co-op ----------
   let link = null;
   const remote = { buf: [], offset: null, lastSplits: 0, lastState: null, prevState: null };
-  const setError = (msg) => { $('menu-error').textContent = msg || ''; };
-  const busy = (on) => ['btn-solo', 'btn-host', 'btn-join'].forEach((id) => { $(id).disabled = on; });
-
-  function startSolo() {
-    if (game.state !== 'intro' || game.role !== 'solo') return;
-    audio.start();
-    restart();
-  }
+  const setError = (msg) => { if ($('menu-error')) $('menu-error').textContent = msg || ''; };
 
   function setCoopStatus() {
     const el = $('coop-status');
@@ -219,65 +344,61 @@ async function main() {
     if (game.role === 'driver') {
       el.textContent = link && link.open ? `👥 Beifahrer verbunden${ping}` : `👥 Warte auf Beifahrer · Code ${game.roomCode || '…'}`;
     } else {
-      el.textContent = link && link.open ? `📖 Beifahrer · verbunden${ping}` : '📖 Verbindung zum Fahrer verloren';
+      el.textContent = link && link.open ? `📖 Beifahrer · verbunden${ping}` : '📖 Verbinde mit dem Fahrer…';
     }
   }
 
-  function hostGame() {
-    setError('');
-    busy(true);
-    $('lobby').classList.remove('hidden');
-    $('lobby-status').textContent = 'Raum wird erstellt…';
+  function hello() { return { t: 'hello', seed: SEED, env: ENV.id, car: CAR.id, damage: vehicle.damage }; }
+
+  function startHosting(preferredCode) {
     game.role = 'driver';
     notebook.setRole('driver');
     hostRoom({
+      preferredCode,
       onCode: (code) => {
         game.roomCode = code;
-        $('room-code').textContent = code;
-        $('lobby-status').textContent = 'Gib deinem Beifahrer diesen Code. Warte auf Beifahrer…';
+        sessionStorage.setItem('rally.hostCode', code);
+        if ($('m-host')) showMenu(); // show the code in the menu
       },
       onGuest: (l) => {
         link = l;
-        link.send({ t: 'hello', seed: SEED });
+        link.send(hello());
         link.onClose(() => setCoopStatus());
-        if (game.state === 'intro') {
-          $('lobby-status').textContent = 'Beifahrer verbunden! Bereit?';
-          $('btn-start').classList.remove('hidden');
-        } else if (game.state === 'finished') {
-          link.send({ t: 'finish', time: game.time, line: '' });
-        }
+        if (game.state === 'finished') link.send({ t: 'finish', time: game.time + game.penalty, line: '' });
       },
-      onError: (e) => { setError(e.message); },
+      onError: (e) => setError(e.message),
     });
   }
 
-  async function joinGame(code) {
+  async function joinGame(code, retries = 0) {
     code = normalizeCode(code);
     if (code.length !== 5) { setError('Der Code hat 5 Zeichen.'); return; }
     setError('');
-    busy(true);
-    $('lobby').classList.remove('hidden');
-    $('room-code').textContent = code;
-    $('lobby-status').textContent = 'Verbinde mit dem Fahrer…';
+    game.roomCode = code;
+    if (!JOIN) { go(`?seed=${SEED}&env=${ENV.id}&car=${CAR.id}&join=${code}`); return; }
+    $('loading').classList.remove('hidden');
+    $('loading').textContent = retries ? `Warte auf den Fahrer… (${retries})` : 'Verbinde mit dem Fahrer…';
     try {
       const l = await joinRoom(code);
-      const hello = await new Promise((resolve, reject) => {
+      const h = await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('Der Fahrer antwortet nicht.')), 8000);
         l.on('hello', (m) => { clearTimeout(timer); resolve(m); });
       });
-      if (hello.seed !== SEED) {
-        // load the driver's stage, then join again automatically
+      if (h.seed !== SEED || h.env !== ENV.id || h.car !== CAR.id) {
         l.close();
-        location.search = `?seed=${hello.seed}&join=${code}`;
+        go(`?seed=${h.seed}&env=${h.env}&car=${h.car}&join=${code}`);
         return;
       }
       link = l;
-      game.roomCode = code;
+      vehicle.setDamage(h.damage || {});
+      car.setDamage(vehicle.damage);
       becomeCodriver();
     } catch (e) {
-      busy(false);
-      $('lobby').classList.add('hidden');
-      setError(e.message);
+      // the driver may be loading the next stage: keep trying for a while
+      if (retries < 25) { setTimeout(() => joinGame(code, retries + 1), 2000); return; }
+      showOverlay(`<p class="sub">${e.message}</p><button class="btn primary" id="j-retry">Nochmal versuchen</button><button class="btn ghost" id="j-menu">Hauptmenü</button>`);
+      $('j-retry').onclick = () => location.reload();
+      $('j-menu').onclick = () => go('');
     }
   }
 
@@ -286,35 +407,34 @@ async function main() {
     game.camMode = 0;
     document.body.classList.add('codriver');
     notebook.setRole('codriver');
-    $('overlay').classList.add('hidden');
+    hideOverlay();
     $('hud').classList.remove('hidden');
     $('message').textContent = 'Warte auf den Start…';
     link.on('s', (m) => {
       const off = performance.now() - m.ts;
-      // smallest observed delay = best estimate of the clock offset (drifts up slowly)
       remote.offset = remote.offset === null ? off : Math.min(remote.offset + 0.05, off);
       remote.buf.push(m);
       if (remote.buf.length > 30) remote.buf.shift();
     });
     link.on('restart', () => {
-      remote.buf.length = 0; // drop states from the previous run
+      remote.buf.length = 0;
       remote.lastSplits = 0;
       $('splits').innerHTML = '';
-      $('result').classList.add('hidden');
-      $('overlay').classList.add('hidden');
+      hideOverlay();
       notebook.sync(stage.startIndex - 4);
     });
-    link.on('finish', (m) => { $('message').textContent = 'ZIEL!'; showResult(m.time, m.line || ''); });
-    link.onClose(() => {
-      setCoopStatus();
-      $('intro').classList.add('hidden');
-      const r = $('result');
-      r.innerHTML = '<p class="sub">Verbindung zum Fahrer verloren</p><button class="btn primary" id="btn-rejoin">Neu verbinden</button>';
-      r.classList.remove('hidden');
-      $('overlay').classList.remove('hidden');
-      $('btn-rejoin').onclick = () => { location.search = `?seed=${SEED}&join=${game.roomCode}`; };
+    link.on('finish', (m) => {
+      $('message').textContent = 'ZIEL!';
+      game.state = 'finished';
+      showResult(m.time, m.line || '');
     });
-    // sound needs a click or key press in this tab
+    link.onClose(() => {
+      // usually the driver is loading the next stage; reconnect
+      setCoopStatus();
+      $('message').textContent = '';
+      showOverlay('<p class="sub">Verbindung zum Fahrer unterbrochen – verbinde neu…</p>');
+      setTimeout(() => location.reload(), 2500);
+    });
     const unlock = () => {
       audio.start();
       window.removeEventListener('pointerdown', unlock);
@@ -324,19 +444,32 @@ async function main() {
     window.addEventListener('keydown', unlock);
   }
 
-  $('btn-solo').onclick = startSolo;
-  $('btn-host').onclick = hostGame;
-  $('btn-join').onclick = () => joinGame($('join-code').value);
-  $('join-code').addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (e.key === 'Enter') joinGame($('join-code').value);
-  });
-  $('btn-start').onclick = () => { audio.start(); restart(); };
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && game.state === 'intro' && game.role === 'solo' && document.activeElement !== $('join-code')) startSolo();
-  });
-  if (params.get('join')) { $('join-code').value = params.get('join'); joinGame(params.get('join')); }
-  else if (AUTOPILOT) startSolo();
+  // ---------- start-up ----------
+  $('loading').textContent = '';
+  placeAtIndex(stage.startIndex - 4);
+  // sound can only start after a key press or click
+  const unlockAudio = () => { audio.start(); };
+  window.addEventListener('keydown', unlockAudio, { once: true });
+  window.addEventListener('pointerdown', unlockAudio, { once: true });
+
+  if (JOIN) {
+    joinGame(JOIN);
+  } else {
+    if (game.roomCode) startHosting(game.roomCode);
+    if (MODE === 'final') {
+      showOverlay(finalScreen(CHAMP));
+      $('f-new').onclick = () => go('');
+      enterAction = () => go('');
+    } else if (MODE === 'champ') {
+      if (params.has('go')) { hideOverlay(); restart(); } else showChampIntro();
+    } else if (params.has('go') || AUTOPILOT) {
+      hideOverlay();
+      restart();
+    } else {
+      if (params.get('menu')) sessionStorage.setItem('rally.tab', params.get('menu'));
+      showMenu();
+    }
+  }
   setInterval(setCoopStatus, 500);
 
   window.addEventListener('resize', () => {
@@ -351,13 +484,13 @@ async function main() {
   let camInit = false;
   const lookTarget = new THREE.Vector3();
   const tmpV = new THREE.Vector3();
-
   const cockpitQuat = new THREE.Quaternion();
   let cockpitInit = false;
   let lookYaw = 0;
   const qBase = new THREE.Quaternion(), qTmp = new THREE.Quaternion();
   const euler = new THREE.Euler();
   const headLocal = new THREE.Vector3();
+  let shakeTime = 0;
 
   function updateCamera(dt, pos, quat) {
     const fwd = tmpV.set(1, 0, 0).applyQuaternion(quat);
@@ -380,46 +513,33 @@ async function main() {
       camera.lookAt(lookTarget);
       cockpitInit = false;
     } else {
-      // driver's eyes (cockpit) or bonnet camera, rigidly attached to the car
-      // but with slightly smoothed rotation so bumps don't make the view jittery
+      // driver's/passenger's eyes or bonnet camera, attached to the car with slightly smoothed rotation
       if (!cockpitInit) { cockpitQuat.copy(quat); cockpitInit = true; }
       cockpitQuat.slerp(quat, 1 - Math.exp(-dt * 22));
       if (game.camMode === 0) {
         headLocal.copy(car.headPosition);
         if (game.role === 'codriver') headLocal.z = -headLocal.z; // passenger seat
-      }
-      else headLocal.set(1.25, 0.5, 0);
+      } else headLocal.set(1.25, 0.5, 0);
       headLocal.y -= 0.02;
       camera.position.copy(headLocal).applyQuaternion(quat).add(pos);
       if (game.camMode === 0) {
-        // gravel vibration
-        const shake = Math.min(1, speed / 30) * 0.006;
+        const shake = Math.min(1, speed / 30) * 0.006 * (ENV.id === 'tarmac' ? 0.4 : 1) + (shakeTime > 0 ? 0.05 * shakeTime : 0);
         camera.position.y += (Math.random() - 0.5) * shake;
+        camera.position.x += (Math.random() - 0.5) * (shakeTime > 0 ? 0.05 * shakeTime : 0);
       }
-      // look a little into the corner the car is steering into
       lookYaw += (vehicle.steer * 0.5 - lookYaw) * (1 - Math.exp(-dt * 4));
       euler.set(game.camMode === 0 ? -0.05 : -0.04, -Math.PI / 2 + (game.camMode === 0 ? lookYaw : 0), 0, 'YXZ');
       qBase.setFromEuler(euler);
       camera.quaternion.copy(qTmp.copy(cockpitQuat).multiply(qBase));
       camInit = false;
     }
+    shakeTime = Math.max(0, shakeTime - dt * 2);
     car.steeringWheel.rotation.x = -(vehicle.steer / TUNING.steerLow) * 2.2;
     const fovBase = game.camMode === 0 ? 72 : 62;
     const fov = fovBase + Math.min(game.camMode === 0 ? 8 : 14, speed * (game.camMode === 0 ? 0.12 : 0.22));
     if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
     sky.position.copy(camera.position);
   }
-
-  // ---------- main loop ----------
-  const STEP = 1 / 60;
-  let acc = 0;
-  let last = performance.now();
-  const gravelColor = { r: 0.66, g: 0.58, b: 0.46 };
-  const grassColor = { r: 0.46, g: 0.43, b: 0.33 };
-  const renderPos = new THREE.Vector3(), renderQuat = new THREE.Quaternion();
-  const contact = { x: 0, y: 0, z: 0 };
-
-  window.__rally = { vehicle, stage, game, TUNING, restart, pacenotes, notebook, getLink: () => link, renderer, scene, camera, sun, world, autopilot, surfaceAt, placeAtIndex };
 
   // ---------- network state (driver sends, co-driver shows) ----------
   let sendTick = 0;
@@ -431,13 +551,15 @@ async function main() {
       if (vehicle.vc.wheelIsInContact(i)) contacts |= 1 << i;
       if (vehicle.wheelSurface[i] === 'gravel') surf |= 1 << i;
     }
+    const d = vehicle.damage;
     link.send({
       t: 's', ts: performance.now(),
       p: [r3(t.x), r3(t.y), r3(t.z)], q: [r3(q.x), r3(q.y), r3(q.z), r3(q.w)], lv: [r3(v.x), r3(v.y), r3(v.z)],
       v: r3(vehicle.speed), st: r3(vehicle.steer), r: Math.round(vehicle.rpm), g: vehicle.gear, th: r3(vehicle.throttle || 0),
-      i: game.trackIndex, tm: r3(game.time), gs: game.state, cd: r3(game.countdown),
+      i: game.trackIndex, tm: r3(game.time + game.penalty), gs: game.state, cd: r3(game.countdown),
       w: [0, 1, 2, 3].map((i) => r3(vehicle.vc.wheelSuspensionLength(i) ?? TUNING.restLength)),
       c: contacts, sf: surf, sl: vehicle.wheelSlip.map(r3), sp: game.splits,
+      dm: [r3(d.engine), r3(d.suspension), r3(d.body)],
     });
   }
 
@@ -470,14 +592,18 @@ async function main() {
       vehicle.wheelSlip[i] = s.sl[i];
       vehicle.wheelSurface[i] = s.sf & (1 << i) ? 'gravel' : 'grass';
     }
-    // progress, time and state come from the newest message
     const latest = buf[buf.length - 1];
+    if (latest.dm) {
+      const [e, su, bo] = latest.dm;
+      if (bo > vehicle.damage.body + 0.03) shakeTime = 1; // the driver hit something
+      vehicle.setDamage({ engine: e, suspension: su, body: bo });
+    }
     game.trackIndex = latest.i;
     game.time = latest.tm;
     game.countdown = latest.cd;
     remote.prevState = remote.lastState;
     remote.lastState = latest.gs;
-    game.state = latest.gs === 'intro' ? 'countdown' : latest.gs;
+    if (game.state !== 'finished' || latest.gs !== 'finished') game.state = latest.gs === 'intro' ? 'countdown' : latest.gs;
     if (latest.sp.length < remote.lastSplits) { remote.lastSplits = 0; $('splits').innerHTML = ''; }
     while (remote.lastSplits < latest.sp.length) {
       const k = remote.lastSplits++;
@@ -506,24 +632,52 @@ async function main() {
     return wheelTmp;
   }
 
+  let toastTimer = 0;
+  function toast(text, secs = 1.6) { $('toast').textContent = text; toastTimer = secs; }
+
+  function onImpact(sev) {
+    if (sev <= 0) return;
+    car.setDamage(vehicle.damage);
+    audio.crash(Math.min(1, sev * 2));
+    shakeTime = Math.min(1.2, 0.4 + sev * 2);
+    if (sev > 0.04) toast('Schaden!');
+  }
+
+  // ---------- main loop ----------
+  const STEP = 1 / 60;
+  let acc = 0;
+  let last = performance.now();
+  const smokeColor = { r: 0.32, g: 0.32, b: 0.34 };
+  const renderPos = new THREE.Vector3(), renderQuat = new THREE.Quaternion();
+  const contact = { x: 0, y: 0, z: 0 };
+  const smokePoint = new THREE.Vector3();
+
+  window.__rally = { vehicle, stage, game, TUNING, restart, pacenotes, notebook, getLink: () => link, renderer, scene, camera, sun, world, autopilot, surfaceAt, placeAtIndex, events, onImpact, ENV, CAR, CHAMP };
+
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     const inp = input.read(dt);
+    const isCo = game.role === 'codriver';
+    const overlayOpen = !$('overlay').classList.contains('hidden');
 
     // one-shot actions
     if (inp.actions.has('KeyM')) audio.toggleMute();
-    if (inp.actions.has('KeyB') && game.role !== 'codriver') notebook.toggleBook();
+    if (inp.actions.has('KeyB') && !isCo) notebook.toggleBook();
     if (inp.actions.has('KeyV') && game.role === 'solo') notebook.toggleVoice();
     if (inp.actions.has('KeyC')) {
       game.camMode = (game.camMode + 1) % 3;
       localStorage.setItem('rally.cam', String(game.camMode));
     }
-    const isCo = game.role === 'codriver';
-    if (inp.actions.has('KeyN') && game.role === 'solo') { location.search = `?seed=${Math.floor(Math.random() * 99999) + 1}`; return; }
-    if (inp.actions.has('Enter') && game.state !== 'intro' && !isCo) restart();
+    if (inp.actions.has('Enter') && overlayOpen && enterAction) enterAction();
+    else if (inp.actions.has('Enter') && MODE === 'free' && !isCo && game.state !== 'intro') restart();
+    if (inp.actions.has('KeyN') && MODE === 'free' && !isCo && !overlayOpen) { go(freeQuery(Math.floor(Math.random() * 99999) + 1, ENV.id, CAR.id, true)); return; }
+    if (inp.actions.has('Escape') && !isCo && game.state !== 'intro') {
+      if (MODE === 'champ' && game.state === 'running' && !confirm('Prüfung abbrechen? Der Fortschritt dieser Prüfung geht verloren.')) { /* stay */ } else go('');
+    }
     if (!isCo && inp.actions.has('KeyR') && (game.state === 'running' || game.state === 'countdown')) {
       placeAtIndex(Math.max(stage.startIndex - 4, game.trackIndex - 3));
+      if (MODE === 'champ' && game.state === 'running') { game.penalty += RESET_PENALTY; toast(`Bergung +${RESET_PENALTY} s`); }
     }
 
     let drive = AUTOPILOT && game.state === 'running' ? autopilot() : inp;
@@ -536,7 +690,10 @@ async function main() {
       acc += dt;
       while (acc >= STEP) {
         vehicle.step(STEP, drive, surfaceAt);
-        world.step();
+        world.step(events);
+        events.drainContactForceEvents((e) => {
+          if (vehicle.colliders.has(e.collider1()) || vehicle.colliders.has(e.collider2())) onImpact(vehicle.applyImpact(e.maxForceDirection()));
+        });
         snapshot();
         acc -= STEP;
         if (game.state === 'running') game.time += STEP;
@@ -565,14 +722,8 @@ async function main() {
     if (game.state === 'running' && !isCo) {
       const k = game.splits.length;
       if (k < stage.splitIndices.length && ti >= stage.splitIndices[k] && distFromRoad < 25) {
-        game.splits.push(game.time);
-        let cls = '', diff = '';
-        if (game.bestSplits && game.bestSplits[k] != null) {
-          const dd = game.time - game.bestSplits[k];
-          cls = dd < 0 ? 'faster' : 'slower';
-          diff = ` <span class="${cls}">${dd < 0 ? '−' : '+'}${Math.abs(dd).toFixed(2)}</span>`;
-        }
-        $('splits').insertAdjacentHTML('beforeend', `<div>Split ${k + 1}: ${formatTime(game.time)}${diff}</div>`);
+        game.splits.push(game.time + game.penalty);
+        $('splits').insertAdjacentHTML('beforeend', `<div>Split ${k + 1}: ${formatTime(game.time + game.penalty)}</div>`);
       }
       if (ti >= stage.finishIndex && distFromRoad < 25) {
         $('message').textContent = 'ZIEL!';
@@ -585,13 +736,17 @@ async function main() {
     // stuck / off-road helpers
     const up = isCo ? { y: 1 } : vehicle.up();
     if (up.y < 0.25 && Math.abs(vehicle.speed) < 2) game.flipTimer += dt; else game.flipTimer = 0;
-    if (!isCo && (game.flipTimer > 2.5 || p.y < -200)) placeAtIndex(game.trackIndex);
+    if (!isCo && (game.flipTimer > 2.5 || p.y < -200)) {
+      placeAtIndex(game.trackIndex);
+      if (MODE === 'champ' && game.state === 'running') { game.penalty += RESET_PENALTY; toast(`Bergung +${RESET_PENALTY} s`); }
+    }
     let hint = '';
     if (game.state === 'running' && !isCo) {
       if (game.flipTimer > 0.6) hint = 'Überschlagen – gleich geht’s weiter';
-      else if (distFromRoad > 35) hint = 'Weit weg von der Strecke – R drücken';
+      else if (distFromRoad > 35) hint = MODE === 'champ' ? `Weit weg von der Strecke – R drücken (+${RESET_PENALTY} s)` : 'Weit weg von der Strecke – R drücken';
     }
     $('hint').textContent = hint;
+    if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) $('toast').textContent = ''; }
 
     // visuals
     if (!isCo) {
@@ -601,32 +756,39 @@ async function main() {
     }
     car.root.position.copy(renderPos);
     car.root.quaternion.copy(renderQuat);
+    const dmg = vehicle.damage;
     for (let i = 0; i < 4; i++) {
       const w = car.wheels[i];
       const wp = vehicle.wheelPositions[i];
       const len = isCo ? remote.susp[i] : vehicle.vc.wheelSuspensionLength(i) ?? TUNING.restLength;
       w.steerGroup.position.set(wp.x, wp.y - len, wp.z);
       w.steerGroup.rotation.y = i < 2 ? vehicle.steer : 0;
+      // bent suspension: one front wheel leans
+      w.steerGroup.rotation.x = i === (vehicle.pull > 0 ? 1 : 0) ? dmg.suspension * 0.25 * vehicle.pull : 0;
       if (isCo) vehicle.wheelSpin[i] += (vehicle.speed * dt) / TUNING.wheelRadius;
       w.spin.rotation.z = -vehicle.wheelSpin[i];
     }
 
-    // dust
+    // dust / snow spray and engine smoke
     const vel = isCo ? remote.vel : vehicle.body.linvel();
     const sp = Math.abs(vehicle.speed);
     for (let i = 0; i < 4; i++) {
       if (isCo ? !(remote.contacts & (1 << i)) : !vehicle.vc.wheelIsInContact(i)) continue;
-      const grass = vehicle.wheelSurface[i] === 'grass';
-      const amount = Math.min(1, sp / 28) * (grass ? 0.25 : 0.6) + vehicle.wheelSlip[i] * Math.min(1, sp / 6) * 0.9;
+      const offRoadWheel = vehicle.wheelSurface[i] === 'grass';
+      const base = offRoadWheel ? 0.3 : 0.6 * ENV.dust.amount;
+      const amount = Math.min(1, sp / 28) * base + vehicle.wheelSlip[i] * Math.min(1, sp / 6) * 0.9 * Math.max(0.3, ENV.dust.amount);
       let n = amount * dt * 55;
       const cp = isCo ? wheelGroundPoint(i) : vehicle.vc.wheelContactPoint(i, contact);
       if (!cp) continue;
+      const color = offRoadWheel ? { r: ENV.dust.color.r * 0.75, g: ENV.dust.color.g * 0.75, b: ENV.dust.color.b * 0.7 } : ENV.dust.color;
       while (n > 0) {
-        if (n >= 1 || Math.random() < n) {
-          dust.emit(cp.x, cp.y + 0.15, cp.z, vel.x * 0.25, 0.4, vel.z * 0.25, amount, grass ? grassColor : gravelColor);
-        }
+        if (n >= 1 || Math.random() < n) dust.emit(cp.x, cp.y + 0.15, cp.z, vel.x * 0.25, 0.4, vel.z * 0.25, amount, color);
         n -= 1;
       }
+    }
+    if (dmg.engine > 0.45 && Math.random() < (dmg.engine - 0.35) * dt * 30) {
+      smokePoint.set(1.3, 0.4, 0).applyQuaternion(renderQuat).add(renderPos);
+      dust.emit(smokePoint.x, smokePoint.y, smokePoint.z, vel.x * 0.6, 1.2, vel.z * 0.6, 0.6, smokeColor);
     }
     dust.update(dt, scene.fog, renderer.domElement.height);
 
@@ -635,17 +797,25 @@ async function main() {
     sun.target.position.copy(renderPos);
 
     // HUD
-    const kmh = Math.round(sp * 3.6);
-    $('speed').textContent = kmh;
+    $('speed').textContent = Math.round(sp * 3.6);
     $('gear').textContent = vehicle.gear < 0 ? 'R' : String(vehicle.gear);
     $('rpm-fill').style.width = `${Math.min(100, (vehicle.rpm / 7600) * 100)}%`;
-    $('timer').textContent = formatTime(game.time);
+    $('timer').textContent = formatTime(isCo ? game.time : game.time + game.penalty);
     const total = stage.finishIndex - stage.startIndex;
     const done = Math.max(0, Math.min(total, ti - stage.startIndex));
     $('progress-fill').style.width = `${(done / total) * 100}%`;
     $('progress-label').textContent = `Noch ${((total - done) / 1000).toFixed(1).replace('.', ',')} km`;
+    const anyDamage = dmg.engine + dmg.suspension + dmg.body > 0.01;
+    $('damage').classList.toggle('hidden', !anyDamage);
+    if (anyDamage) {
+      for (const part of ['engine', 'suspension', 'body']) {
+        const el = $(`dmg-${part}`);
+        el.style.width = `${Math.round(dmg[part] * 100)}%`;
+        el.style.background = barColor(dmg[part]);
+      }
+    }
 
-    const onGravel = vehicle.wheelSurface.filter((s) => s === 'gravel').length >= 2;
+    const onGravel = vehicle.wheelSurface.filter((s) => s === 'gravel').length >= 2 && ENV.id !== 'tarmac';
     const slip = Math.max(...vehicle.wheelSlip);
     audio.update(vehicle.rpm, isCo ? vehicle.throttle : drive.throttle, vehicle.speed, slip, onGravel);
 
@@ -653,9 +823,13 @@ async function main() {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+  // testing aid: run frames by hand (hidden tabs get no animation frames)
+  window.__rally.tick = (n = 1) => { for (let k = 0; k < n; k++) { last -= 1000 / 60; frame(performance.now()); } };
 }
 
 main().catch((e) => {
   console.error(e);
+  $('loading').classList.remove('hidden');
   $('loading').textContent = `Fehler: ${e.message}`;
 });
+

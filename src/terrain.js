@@ -12,6 +12,7 @@ const BLEND_OUT = 18; // distance beyond the road edge where terrain is natural 
 export function makeTerrainHeight(stage) {
   const hw = stage.halfWidth;
   const radius = hw + BLEND_OUT;
+  const edgeKind = stage.env.terrain.edge;
   return function terrainHeight(x, z) {
     const base = stage.baseHeight(x, z);
     const i = stage.hash.nearest(x, z, radius);
@@ -19,10 +20,19 @@ export function makeTerrainHeight(stage) {
     const d = Math.hypot(stage.xs[i] - x, stage.zs[i] - z);
     const roadY = stage.ys[i];
     const w = smoothstep(hw + 0.8, hw + BLEND_OUT, d);
-    // shallow ditch just beyond the road edge
-    const e = (d - (hw + 1.2)) / 2.4;
-    const ditch = e > 0 && e < 1 ? -0.35 * Math.sin(e * Math.PI) : 0;
-    return roadY + (base - roadY) * w + ditch * (1 - w);
+    // road edge: ditch (gravel), snow bank, low kerb (tarmac) or nothing (desert)
+    let edge = 0;
+    if (edgeKind === 'ditch') {
+      const e = (d - (hw + 1.2)) / 2.4;
+      if (e > 0 && e < 1) edge = -0.35 * Math.sin(e * Math.PI);
+    } else if (edgeKind === 'bank') {
+      const e = (d - (hw + 0.9)) / 3.2;
+      if (e > 0 && e < 1) edge = 0.6 * Math.sin(e * Math.PI);
+    } else if (edgeKind === 'kerb') {
+      const e = (d - (hw + 0.6)) / 1.2;
+      if (e > 0 && e < 1) edge = 0.1 * Math.sin(e * Math.PI);
+    }
+    return roadY + (base - roadY) * w + edge * (1 - w);
   };
 }
 
@@ -68,8 +78,9 @@ export function buildTerrain(stage, world, scene) {
     vertexColors: true, map: grassTexture(), roughness: 0.95, metalness: 0,
   });
 
-  const grass = new THREE.Color(0x5d7a32), grass2 = new THREE.Color(0x7b8a3c);
-  const dirt = new THREE.Color(0x7a6448), rock = new THREE.Color(0x7d776c);
+  const G = stage.env.ground;
+  const grass = new THREE.Color(G.a), grass2 = new THREE.Color(G.b);
+  const dirt = new THREE.Color(G.shoulder), rock = new THREE.Color(G.rock);
   const tmp = new THREE.Color();
   const hw = stage.halfWidth;
   const chunks = [];

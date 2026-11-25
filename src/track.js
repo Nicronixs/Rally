@@ -1,16 +1,21 @@
 // Generates a point-to-point rally stage: a centreline sampled every metre,
 // with heights, tangents and curvature, plus fast nearest-point lookups.
 import * as THREE from 'three';
-import { mulberry32, fbm } from './noise.js';
+import { mulberry32, fbm, valueNoise } from './noise.js';
+import { getEnvironment } from './environments.js';
 
 const CELL = 16; // spatial hash cell size in metres
 
 export const ROAD_HALF_WIDTH = 4.2;
 
-export function makeBaseHeight(seed) {
-  return (x, z) =>
-    48 * fbm(x / 520, z / 520, seed, 4) +
-    5 * fbm(x / 70, z / 70, seed + 99, 3);
+export function makeBaseHeight(seed, env = getEnvironment('forest')) {
+  const T = env.terrain;
+  const dunes = env.id === 'desert';
+  return (x, z) => {
+    let h = T.amp * fbm(x / T.scale, z / T.scale, seed, 4) + T.detail * fbm(x / 70, z / 70, seed + 99, 3);
+    if (dunes) h += 7 * (1 - Math.abs(valueNoise(x / 90 + z / 300, z / 140, seed + 7))) ** 2;
+    return h;
+  };
 }
 
 function controlPoints(rng, count) {
@@ -85,7 +90,7 @@ class SpatialHash {
   }
 }
 
-function tryGenerate(seed) {
+function tryGenerate(seed, env) {
   const rng = mulberry32(seed);
   const pts = controlPoints(rng, 42);
   if (pts.length < 30) return null;
@@ -134,7 +139,7 @@ function tryGenerate(seed) {
     }
   }
 
-  const baseHeight = makeBaseHeight(seed);
+  const baseHeight = makeBaseHeight(seed, env);
   let ys = new Float32Array(count);
   for (let i = 0; i < count; i++) ys[i] = baseHeight(xs[i], zs[i]);
   ys = boxBlur(boxBlur(boxBlur(ys, 30), 30), 20);
@@ -156,10 +161,10 @@ function tryGenerate(seed) {
     bounds: { minX, maxX, minZ, maxZ } };
 }
 
-export function generateStage(seed = 1) {
+export function generateStage(seed = 1, env = getEnvironment('forest')) {
   for (let attempt = 0; attempt < 400; attempt++) {
-    const t = tryGenerate(seed + attempt * 7919);
-    if (t) return new Stage(t);
+    const t = tryGenerate(seed + attempt * 7919, env);
+    if (t) { t.env = env; return new Stage(t); }
   }
   throw new Error('Keine gültige Strecke gefunden');
 }

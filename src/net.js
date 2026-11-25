@@ -85,12 +85,15 @@ export class Link {
 
 // Driver: open a room. onGuest is called for every co-driver who connects
 // (a reconnecting co-driver replaces the previous connection).
-export function hostRoom({ onCode, onGuest, onError }) {
+// preferredCode: reopen the same room after the page was reloaded for the next stage;
+// the server may still hold the old id for a few seconds, so keep retrying it.
+export function hostRoom({ preferredCode, onCode, onGuest, onError }) {
   let attempts = 0;
   let current = null;
   const tryOpen = () => {
-    const code = randomCode();
+    const code = preferredCode && attempts < 12 ? preferredCode : randomCode();
     const peer = new Peer(PREFIX + code, { debug: 0 });
+    window.addEventListener('beforeunload', () => peer.destroy());
     peer.on('open', () => onCode(code));
     peer.on('connection', (conn) => {
       conn.on('open', () => {
@@ -101,7 +104,11 @@ export function hostRoom({ onCode, onGuest, onError }) {
     });
     peer.on('disconnected', () => { if (!peer.destroyed) peer.reconnect(); });
     peer.on('error', (err) => {
-      if (err.type === 'unavailable-id' && attempts++ < 5) { peer.destroy(); tryOpen(); return; }
+      if (err.type === 'unavailable-id' && attempts++ < 16) {
+        peer.destroy();
+        setTimeout(tryOpen, preferredCode ? 1500 : 0);
+        return;
+      }
       if (err.type === 'peer-unavailable') return;
       onError(new Error(errorText(err)));
     });
@@ -113,7 +120,8 @@ export function hostRoom({ onCode, onGuest, onError }) {
 export function joinRoom(code) {
   return new Promise((resolve, reject) => {
     const peer = new Peer({ debug: 0 });
-    const timer = setTimeout(() => { peer.destroy(); reject(new Error('Zeitüberschreitung – ist der Fahrer noch im Raum?')); }, 15000);
+    window.addEventListener('beforeunload', () => peer.destroy());
+    const timer = setTimeout(() => { peer.destroy(); reject(new Error('Zeitüberschreitung – ist der Fahrer noch im Raum?')); }, 10000);
     peer.on('open', () => {
       const conn = peer.connect(PREFIX + normalizeCode(code), { reliable: true, serialization: 'json' });
       conn.on('open', () => { clearTimeout(timer); resolve(new Link(conn, peer)); });

@@ -45,6 +45,23 @@ export class CarAudio {
     this.noise.start();
   }
 
+  // short thump of filtered noise for a crash; sev 0..1
+  crash(sev) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise.buffer;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 500 + sev * 1500;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(Math.min(1, 0.4 + sev), t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35 + sev * 0.4);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t, Math.random());
+    src.stop(t + 1);
+  }
+
   toggleMute() {
     this.muted = !this.muted;
     localStorage.setItem('rally.muted', this.muted ? '1' : '0');
