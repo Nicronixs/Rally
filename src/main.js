@@ -993,7 +993,7 @@ async function main() {
   const contact = { x: 0, y: 0, z: 0 };
   const smokePoint = new THREE.Vector3();
 
-  window.__rally = { vehicle, stage, game, TUNING, restart, pacenotes, notebook, getLink: () => link, renderer, scene, camera, sun, world, autopilot, surfaceAt, placeAtIndex, events, onImpact, ENV, CAR, CHAMP };
+  window.__rally = { vehicle, stage, game, TUNING, restart, pacenotes, notebook, getLink: () => link, renderer, scene, camera, sun, world, autopilot, surfaceAt, placeAtIndex, events, onImpact, ENV, CAR, CHAMP, audio };
 
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
