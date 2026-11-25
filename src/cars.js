@@ -8,7 +8,7 @@ export const CARS = {
     drive: 'Allrad',
     tagline: 'Ausgewogen und schnell – verzeiht viel.',
     tuning: {},
-    livery: { color: 0xf2f2f2, stripe: 0x1f5fbf, accent: 0xe0322b, number: 7 },
+    livery: { color: 0xf2f2f2, stripe: 0x1f5fbf, accent: 0xe0322b, rim: 0xe8e8e8, number: 7 },
   },
   fuchs: {
     id: 'fuchs',
@@ -20,7 +20,7 @@ export const CARS = {
       power: 150000, maxDriveForce: 7600, frontDriveShare: 1.0,
       frontGrip: 1.04, rearGrip: 1.02, steerLow: 0.62, yawHold: 1.5,
     },
-    livery: { color: 0xff8a1f, stripe: 0xffffff, accent: 0x1b1b1b, number: 21 },
+    livery: { color: 0xff8a1f, stripe: 0xffffff, accent: 0x1b1b1b, rim: 0x2a2a2a, number: 21 },
   },
   bison: {
     id: 'bison',
@@ -31,7 +31,7 @@ export const CARS = {
       mass: 1180, power: 215000, maxDriveForce: 8600, frontDriveShare: 0.0,
       frontGrip: 1.0, rearGrip: 0.9, yawHold: 1.0, handbrakeGrip: 0.38,
     },
-    livery: { color: 0x2f7d3a, stripe: 0xffd400, accent: 0xffffff, number: 3 },
+    livery: { color: 0x2f7d3a, stripe: 0xffd400, accent: 0xffffff, rim: 0xd4a72c, number: 3 },
   },
 };
 

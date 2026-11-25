@@ -5,6 +5,7 @@ import { buildTerrain } from './terrain.js';
 import { buildRoad, buildTrees, buildGates } from './road.js';
 import { Vehicle, TUNING } from './vehicle.js';
 import { buildCarModel } from './carModel.js';
+import { loadModels, makeEnvMap } from './models.js';
 import { Dust } from './effects.js';
 import { CarAudio } from './audio.js';
 import { Input } from './input.js';
@@ -57,7 +58,7 @@ async function main() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
 
@@ -93,6 +94,8 @@ async function main() {
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
   world.timestep = 1 / 60;
   const events = new RAPIER.EventQueue(true);
+  $('loading').textContent = 'Modelle werden geladen…';
+  const models = await loadModels();
   const stage = generateStage(SEED, ENV);
   $('loading').textContent = 'Gelände wird gebaut…';
   await nextFrame();
@@ -100,11 +103,11 @@ async function main() {
   buildRoad(stage, scene, ENV);
   $('loading').textContent = 'Landschaft wird gestaltet…';
   await nextFrame();
-  buildTrees(stage, terrain, world, scene, ENV);
-  buildGates(stage, scene);
+  buildTrees(stage, terrain, world, scene, ENV, models);
+  buildGates(stage, scene, world, models);
 
   const vehicle = new Vehicle(world, CAR.tuning);
-  const car = buildCarModel(CAR.livery);
+  const car = buildCarModel(models, CAR.livery, makeEnvMap(renderer, ENV));
   scene.add(car.root);
   if (champActive) vehicle.setDamage(CHAMP.damage);
   car.setDamage(vehicle.damage);
@@ -496,7 +499,7 @@ async function main() {
     const fwd = tmpV.set(1, 0, 0).applyQuaternion(quat);
     const carYaw = Math.atan2(fwd.z, fwd.x);
     const speed = Math.abs(vehicle.speed);
-    car.setCockpitView(game.camMode === 0);
+    car.setView(game.role, game.camMode === 0);
     if (game.camMode === 1) {
       let d = carYaw - camYaw;
       while (d > Math.PI) d -= Math.PI * 2;
@@ -519,8 +522,7 @@ async function main() {
       if (game.camMode === 0) {
         headLocal.copy(car.headPosition);
         if (game.role === 'codriver') headLocal.z = -headLocal.z; // passenger seat
-      } else headLocal.set(1.25, 0.5, 0);
-      headLocal.y -= 0.02;
+      } else headLocal.set(1.3, 0.32, 0);
       camera.position.copy(headLocal).applyQuaternion(quat).add(pos);
       if (game.camMode === 0) {
         const shake = Math.min(1, speed / 30) * 0.006 * (ENV.id === 'tarmac' ? 0.4 : 1) + (shakeTime > 0 ? 0.05 * shakeTime : 0);
@@ -787,7 +789,7 @@ async function main() {
       }
     }
     if (dmg.engine > 0.45 && Math.random() < (dmg.engine - 0.35) * dt * 30) {
-      smokePoint.set(1.3, 0.4, 0).applyQuaternion(renderQuat).add(renderPos);
+      smokePoint.copy(car.smokePoint).applyQuaternion(renderQuat).add(renderPos);
       dust.emit(smokePoint.x, smokePoint.y, smokePoint.z, vel.x * 0.6, 1.2, vel.z * 0.6, 0.6, smokeColor);
     }
     dust.update(dt, scene.fog, renderer.domElement.height);

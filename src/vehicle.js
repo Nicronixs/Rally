@@ -72,7 +72,8 @@ export class Vehicle {
     // collisions report their force so we can turn hard hits into damage
     main.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(IMPACT_THRESHOLD);
     this.colliders = new Set([world.createCollider(main, body).handle]);
-    const cabin = RAPIER.ColliderDesc.cuboid(0.95, 0.27, 0.72).setTranslation(-0.45, 0.6, 0)
+    // cabin up to the roof of the model (roof at about +0.70)
+    const cabin = RAPIER.ColliderDesc.cuboid(0.95, 0.25, 0.66).setTranslation(-0.45, 0.45, 0)
       .setDensity(0).setFriction(0.35)
       .setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(IMPACT_THRESHOLD);
     this.colliders.add(world.createCollider(cabin, body).handle);

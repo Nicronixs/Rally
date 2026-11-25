@@ -39,6 +39,25 @@ Die Verbindung selbst läuft direkt zwischen den beiden Browsern (WebRTC); der �
 
 W/S Gas/Bremse · A/D Lenken · Leertaste Handbremse · R zurück auf die Strecke · C Kamera (Cockpit, Verfolger, Motorhaube) · M Ton · B Aufschrieb · V Ansagen · Enter Neustart · N neue Strecke. Gamepad: RT/LT, linker Stick, A Handbremse, Y Zurücksetzen.
 
+## 3D-Modelle (Blender)
+
+Auto, Bäume, Felsen, Kakteen und die Start-/Ziel-Tore werden mit Python-Skripten in Blender erzeugt und als glTF nach `public/models/` exportiert:
+
+| Datei | Inhalt |
+|---|---|
+| `blender/car.py` | Karosserie aus 17 Querschnitten (gespiegelt, unterteilt, Radläufe per Boolean), Glas, Lichter, Lampenbalken, Flügel, Spiegel, Schmutzfänger, Innenraum mit Armaturenbrett, Schalensitzen, Überrollkäfig und Lenkrad, Fahrer und Beifahrer, Rad mit Bremsscheibe und Bremssattel |
+| `blender/nature.py` | Tanne, verschneite Tanne, Laubbaum, Busch, Fels, Kaktus (Low-Poly, weil tausendfach instanziert) |
+| `blender/gate.py` | Traversen-Tor mit Banner |
+| `blender/build.py` | Baut alles und exportiert `car.glb`, `nature.glb`, `gate.glb`; mit `--preview` zusätzlich Vorschaubilder in `blender/previews/` |
+
+Neu bauen (Blender ≥ 5 im PATH, sonst den vollen Pfad zu `blender.exe` verwenden):
+
+```
+npm run models -- car nature gate --preview
+```
+
+Das Spiel färbt die Materialien nach Namen ein (`Paint`, `Stripe`, `Accent`, `Rim` aus der Lackierung des Autos; Bäume und Felsen bekommen pro Exemplar einen Farbton) und blendet im Cockpit `Glass` und die eigene Figur aus.
+
 ## Aufbau
 
 | Datei | Inhalt |
@@ -53,7 +72,8 @@ W/S Gas/Bremse · A/D Lenken · Leertaste Handbremse · R zurück auf die Streck
 | `src/screens.js` | Menü, Ergebnis-, Service- und Endbildschirm |
 | `src/pacenotes.js` | Aufschrieb aus der Strecke: Richtung, Grad 1–6/Haarnadel, lang, zieht zu, macht auf, Kuppe, Achtung, Distanzen |
 | `src/pacenoteUI.js` | Beifahrer-Buch (Anzeige) und Sprachansagen |
-| `src/carModel.js` | Auto-Modell aus Grundformen, Cockpit mit Lenkrad und Überrollkäfig |
+| `src/carModel.js` | Auto aus `car.glb` mit Lackierung, Rädern, Cockpit-Sicht und Schadensoptik |
+| `src/models.js` | Lädt die glTF-Modelle, Umgebungs-Spiegelung für Lack und Glas |
 | `src/effects.js`, `src/audio.js` | Staub, Motor- und Schottergeräusch |
 | `src/net.js` | Koop-Verbindung (PeerJS/WebRTC): Raum-Code, Nachrichten, Herzschlag |
 | `src/main.js` | Spielablauf, Kamera, HUD, Zeitmessung |

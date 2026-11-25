@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mulberry32, fbm } from './noise.js';
+import { meshParts } from './models.js';
 
 function roadTexture(look) {
   const W = 256, H = 512;
@@ -87,8 +88,12 @@ export function buildRoad(stage, scene, env) {
   return mesh;
 }
 
-// Vegetation and rocks. Kinds: pine, snowpine, mixed (pines + broadleaf), shrub (bushes + rocks).
-export function buildTrees(stage, terrain, world, scene, env) {
+// Vegetation and rocks from nature.glb, drawn as instanced meshes.
+// Kinds: pine, snowpine, mixed (pines + broadleaf), shrub (bushes, rocks and cacti).
+const MODEL = { pine: 'Pine', snowpine: 'PineSnow', broad: 'Broadleaf', shrub: 'Bush', rock: 'Rock', cactus: 'Cactus' };
+const TINTED = new Set(['Needles', 'Leaves', 'Bush', 'Rock', 'Cactus']);
+
+export function buildTrees(stage, terrain, world, scene, env, models) {
   const rng = mulberry32(stage.seed * 3 + 1);
   const b = stage.bounds;
   const hw = stage.halfWidth;
@@ -106,49 +111,37 @@ export function buildTrees(stage, terrain, world, scene, env) {
     const forest = fbm(x / 180, z / 180, stage.seed + 5, 3);
     const density = (forest > 0.05 ? 1 : 0.12) * env.trees.density;
     if (rng() > density) continue;
-    let type = 'pine';
+    let type = kind === 'snowpine' ? 'snowpine' : 'pine';
     if (kind === 'mixed') type = rng() < 0.45 ? 'broad' : 'pine';
-    if (kind === 'shrub') type = rng() < 0.3 ? 'rock' : 'shrub';
+    if (kind === 'shrub') { const r = rng(); type = r < 0.28 ? 'rock' : r < 0.42 ? 'cactus' : 'shrub'; }
     items.push({ x, z, y: terrain.terrainHeight(x, z), s: 0.75 + rng() * 0.6, d, hue: rng(), type });
   }
 
-  const pineTrunk = new THREE.CylinderGeometry(0.18, 0.28, 3, 6); pineTrunk.translate(0, 1.5, 0);
-  const pineCrown = new THREE.ConeGeometry(1.9, 6.5, 7); pineCrown.translate(0, 5.6, 0);
-  const broadTrunk = new THREE.CylinderGeometry(0.2, 0.32, 3.6, 6); broadTrunk.translate(0, 1.8, 0);
-  const broadCrown = new THREE.IcosahedronGeometry(2.5, 0); broadCrown.translate(0, 5.0, 0);
-  const shrubGeo = new THREE.IcosahedronGeometry(1.0, 0); shrubGeo.scale(1.2, 0.7, 1.2); shrubGeo.translate(0, 0.45, 0);
-  const rockGeo = new THREE.DodecahedronGeometry(1.2, 0); rockGeo.scale(1.3, 0.75, 1.0); rockGeo.translate(0, 0.35, 0);
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4030, roughness: 1 });
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true });
-
-  const layers = {
-    pine: [[pineTrunk, trunkMat, false], [pineCrown, leafMat, true]],
-    broad: [[broadTrunk, trunkMat, false], [broadCrown, leafMat, true]],
-    shrub: [[shrubGeo, leafMat, true]],
-    rock: [[rockGeo, leafMat, true]],
-  };
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
-  const col = new THREE.Color(), white = new THREE.Color(0xf4f7fb);
+  const col = new THREE.Color();
   const yAxis = new THREE.Vector3(0, 1, 0);
-  for (const type of Object.keys(layers)) {
+  const tint = (type, h) => {
+    if (type === 'rock') return col.setHSL(0.07, 0.18, 0.36 + h * 0.14);
+    if (type === 'shrub') return col.setHSL(0.15 + h * 0.08, 0.38, 0.26 + h * 0.08);
+    if (type === 'cactus') return col.setHSL(0.27 + h * 0.04, 0.42, 0.28 + h * 0.06);
+    if (type === 'broad') return col.setHSL(0.22 + h * 0.1, 0.5, 0.26 + h * 0.08);
+    return col.setHSL(0.29 + h * 0.06, 0.42, 0.18 + h * 0.07);
+  };
+  for (const type of Object.keys(MODEL)) {
     const list = items.filter((t) => t.type === type);
     if (!list.length) continue;
-    for (const [geo, mat, colored] of layers[type]) {
-      const im = new THREE.InstancedMesh(geo, mat, list.length);
+    for (const part of meshParts(models.nature.getObjectByName(MODEL[type]))) {
+      const tinted = TINTED.has(part.material.name);
+      const mat = part.material.clone();
+      if (tinted) mat.color.set(0xffffff);
+      const im = new THREE.InstancedMesh(part.geometry, mat, list.length);
       list.forEach((t, i) => {
         q.setFromAxisAngle(yAxis, t.hue * 6.28);
         sc.set(t.s, t.s * (0.9 + t.hue * 0.3), t.s);
         p.set(t.x, t.y - 0.2, t.z);
         m.compose(p, q, sc);
         im.setMatrixAt(i, m);
-        if (colored) {
-          if (type === 'rock') col.setHSL(0.07, 0.25, 0.32 + t.hue * 0.12);
-          else if (type === 'shrub') col.setHSL(0.16 + t.hue * 0.08, 0.35, 0.22 + t.hue * 0.08);
-          else if (type === 'broad') col.setHSL(0.22 + t.hue * 0.1, 0.5, 0.22 + t.hue * 0.08);
-          else col.setHSL(0.27 + t.hue * 0.08, 0.45, 0.17 + t.hue * 0.08);
-          if (kind === 'snowpine') col.lerp(white, 0.45 + t.hue * 0.3);
-          im.setColorAt(i, col);
-        }
+        if (tinted) im.setColorAt(i, tint(type, t.hue));
       });
       im.castShadow = true;
       im.receiveShadow = true;
@@ -158,8 +151,8 @@ export function buildTrees(stage, terrain, world, scene, env) {
     // only obstacles near the road need physics
     for (const t of list) {
       if (t.d > hw + 30 || type === 'shrub') continue;
-      if (type === 'rock') world.createCollider(RAPIER.ColliderDesc.ball(0.95 * t.s).setTranslation(t.x, t.y + 0.1, t.z));
-      else world.createCollider(RAPIER.ColliderDesc.cylinder(2, 0.3 * t.s).setTranslation(t.x, t.y + 1.8, t.z));
+      if (type === 'rock') world.createCollider(RAPIER.ColliderDesc.ball(0.9 * t.s).setTranslation(t.x, t.y + 0.1, t.z));
+      else world.createCollider(RAPIER.ColliderDesc.cylinder(2, (type === 'cactus' ? 0.25 : 0.3) * t.s).setTranslation(t.x, t.y + 1.8, t.z));
     }
   }
   return items.length;
@@ -167,42 +160,48 @@ export function buildTrees(stage, terrain, world, scene, env) {
 
 function bannerTexture(text, bg, fg) {
   const c = document.createElement('canvas');
-  c.width = 512; c.height = 96;
+  c.width = 1024; c.height = 128;
   const g = c.getContext('2d');
-  g.fillStyle = bg; g.fillRect(0, 0, 512, 96);
-  g.fillStyle = fg; g.font = 'bold 60px Arial, sans-serif';
+  g.fillStyle = bg; g.fillRect(0, 0, 1024, 128);
+  g.fillStyle = fg; g.font = 'bold 84px Arial, sans-serif';
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(text, 256, 52);
+  g.fillText(text, 512, 70);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
+  t.flipY = false; // glTF UV convention
+  t.anisotropy = 8;
   return t;
 }
 
-function gate(stage, i, text, bg, fg, scene) {
-  const hw = stage.halfWidth + 1.2;
-  const group = new THREE.Group();
-  const postMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-  // local frame: x across the road, z along the driving direction
-  for (const side of [-1, 1]) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.35, 5.2, 0.35), postMat);
-    post.position.set(side * hw, 2.6, 0);
-    post.castShadow = true;
-    group.add(post);
-  }
+// Truss gate from gate.glb; local X across the road, +Z in driving direction.
+function gate(stage, i, text, bg, fg, scene, world, models) {
+  const g = models.gate.getObjectByName('Gate').clone(true);
   const tex = bannerTexture(text, bg, fg);
-  const face = new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.55 });
-  const banner = new THREE.Mesh(new THREE.BoxGeometry(hw * 2 + 0.4, 1.2, 0.2),
-    [postMat, postMat, postMat, postMat, face, face]);
-  banner.position.y = 4.8;
-  banner.castShadow = true;
-  group.add(banner);
-  group.position.set(stage.xs[i], stage.ys[i], stage.zs[i]);
-  group.rotation.y = Math.atan2(stage.tx[i], stage.tz[i]);
-  scene.add(group);
+  g.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = true;
+    o.receiveShadow = true;
+    // metal without reflections renders almost black; keep the aluminium truss bright
+    if (o.material.metalness > 0.5) { o.material = o.material.clone(); o.material.metalness = 0.25; o.material.roughness = 0.45; }
+    if (o.material.name === 'Banner') {
+      o.material = new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.45, roughness: 0.8 });
+    }
+  });
+  g.position.set(stage.xs[i], stage.ys[i], stage.zs[i]);
+  const yaw = Math.atan2(stage.tx[i], stage.tz[i]);
+  g.rotation.y = yaw;
+  scene.add(g);
+  // the truss columns are solid
+  for (const side of [-1, 1]) {
+    const lx = side * 5.4;
+    const x = stage.xs[i] + Math.cos(yaw) * lx, z = stage.zs[i] - Math.sin(yaw) * lx;
+    world.createCollider(RAPIER.ColliderDesc.cuboid(0.2, 2.7, 0.2).setTranslation(x, stage.ys[i] + 2.7, z)
+      .setRotation({ w: Math.cos(yaw / 2), x: 0, y: Math.sin(yaw / 2), z: 0 }));
+  }
 }
 
-export function buildGates(stage, scene) {
-  gate(stage, stage.startIndex, 'START', '#d22b2b', '#ffffff', scene);
-  gate(stage, stage.finishIndex, 'ZIEL', '#1d1d1d', '#ffd400', scene);
-  stage.splitIndices.forEach((i, k) => gate(stage, i, `SPLIT ${k + 1}`, '#1f5fbf', '#ffffff', scene));
+export function buildGates(stage, scene, world, models) {
+  gate(stage, stage.startIndex, 'START', '#d22b2b', '#ffffff', scene, world, models);
+  gate(stage, stage.finishIndex, 'ZIEL', '#1d1d1d', '#ffd400', scene, world, models);
+  stage.splitIndices.forEach((i, k) => gate(stage, i, `SPLIT ${k + 1}`, '#1f5fbf', '#ffffff', scene, world, models));
 }
