@@ -45,6 +45,9 @@ export class PacenoteUI {
     this.bookOn = localStorage.getItem('rally.book') !== '0';
     this.voiceOn = localStorage.getItem('rally.voice') !== '0';
     this.voice = null;
+    this.role = 'solo';
+    this.visibleRows = 6;
+    this.distEl = document.getElementById('notebook-dist');
     this.current = 0; // first note not yet passed
     this.called = 0; // first note not yet spoken
     this.list.innerHTML = notes.map((n, i) => {
@@ -67,20 +70,38 @@ export class PacenoteUI {
     }
   }
 
+  // driver in co-op: no notebook, no voice (the co-driver calls); co-driver: big notebook, no voice.
+  // These are not saved, so solo play keeps its own settings.
+  setRole(role) {
+    this.role = role;
+    if (role === 'driver') { this.bookOn = false; this.voiceOn = false; }
+    if (role === 'codriver') {
+      this.bookOn = true;
+      this.voiceOn = false;
+      // as many big rows as fit on the screen
+      const fit = () => { this.visibleRows = Math.max(3, Math.min(8, Math.floor((window.innerHeight - 260) / 82))); this.render(); };
+      window.addEventListener('resize', fit);
+      fit();
+    }
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    this.applyVisibility();
+    this.render();
+  }
+
   applyVisibility() {
     this.panel.classList.toggle('hidden', !this.bookOn);
-    document.getElementById('voice-state').textContent = this.voiceOn ? 'Ansagen an (V)' : 'Ansagen aus (V)';
+    document.getElementById('voice-state').textContent = this.role !== 'solo' ? '' : this.voiceOn ? 'Ansagen an (V)' : 'Ansagen aus (V)';
   }
 
   toggleBook() {
     this.bookOn = !this.bookOn;
-    localStorage.setItem('rally.book', this.bookOn ? '1' : '0');
+    if (this.role === 'solo') localStorage.setItem('rally.book', this.bookOn ? '1' : '0');
     this.applyVisibility();
   }
 
   toggleVoice() {
     this.voiceOn = !this.voiceOn;
-    localStorage.setItem('rally.voice', this.voiceOn ? '1' : '0');
+    if (this.role === 'solo') localStorage.setItem('rally.voice', this.voiceOn ? '1' : '0');
     if (!this.voiceOn && 'speechSynthesis' in window) speechSynthesis.cancel();
     this.applyVisibility();
   }
@@ -131,12 +152,14 @@ export class PacenoteUI {
       }
     }
     if (changed) this.render();
+    const d = notes[this.current] ? notes[this.current].index - trackIndex : 0;
+    this.distEl.textContent = d > 0 ? `noch ${Math.round(d / 5) * 5} m` : '';
   }
 
   render() {
     const first = this.current;
     this.rows.forEach((row, i) => {
-      const visible = i >= first && i < first + 6;
+      const visible = i >= first && i < first + this.visibleRows;
       row.style.display = visible ? '' : 'none';
       row.classList.toggle('pn-active', i === first);
       row.classList.toggle('pn-called', i < this.called && i !== first);

@@ -10,9 +10,11 @@ import { CarAudio } from './audio.js';
 import { Input } from './input.js';
 import { buildPacenotes } from './pacenotes.js';
 import { PacenoteUI } from './pacenoteUI.js';
+import { hostRoom, joinRoom, normalizeCode } from './net.js';
 
 const $ = (id) => document.getElementById(id);
-const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+// let the loading text paint; the timeout keeps loading going in background tabs (no animation frames there)
+const nextFrame = () => new Promise((r) => { requestAnimationFrame(() => r()); setTimeout(r, 60); });
 const params = new URLSearchParams(location.search);
 const SEED = Number(params.get('seed')) || 7;
 const AUTOPILOT = params.has('autopilot');
@@ -102,6 +104,7 @@ async function main() {
     splits: [],
     flipTimer: 0,
     camMode: Number(localStorage.getItem('rally.cam') || 0), // 0 cockpit, 1 chase, 2 bonnet
+    role: 'solo', // solo, driver, codriver
     best: Number(localStorage.getItem(bestKey)) || null,
     bestSplits: JSON.parse(localStorage.getItem(bestSplitsKey) || 'null'),
   };
@@ -126,6 +129,7 @@ async function main() {
     $('result').classList.add('hidden');
     $('overlay').classList.add('hidden');
     $('hud').classList.remove('hidden');
+    if (game.role === 'driver' && link) link.send({ t: 'restart' });
   }
 
   function finish() {
@@ -141,13 +145,18 @@ async function main() {
     } else {
       line = `Bestzeit ${formatTime(game.best)} (+${(t - game.best).toFixed(2)} s)`;
     }
+    if (game.role === 'driver' && link) link.send({ t: 'finish', time: t, line });
+    showResult(t, line);
+  }
+
+  function showResult(t, line) {
     setTimeout(() => {
       if (game.state !== 'finished') return;
       $('intro').classList.add('hidden');
       $('loading').classList.add('hidden');
       const r = $('result');
       r.innerHTML = `<p class="sub">Etappe beendet</p><div class="result-time">${formatTime(t)}</div>
-        <div class="result-best">${line}</div><p class="small">Enter = nochmal fahren · N = neue Strecke</p>`;
+        <div class="result-best">${line}</div><p class="small">${game.role === 'codriver' ? 'Der Fahrer startet die nächste Fahrt' : game.role === 'driver' ? 'Enter = nochmal fahren' : 'Enter = nochmal fahren · N = neue Strecke'}</p>`;
       r.classList.remove('hidden');
       $('overlay').classList.remove('hidden');
     }, 1800);
@@ -191,14 +200,144 @@ async function main() {
   $('intro').classList.remove('hidden');
   placeAtIndex(stage.startIndex - 4);
 
-  const startHandler = () => {
-    if (game.state !== 'intro') return;
+  // ---------- menu & co-op ----------
+  let link = null;
+  const remote = { buf: [], offset: null, lastSplits: 0, lastState: null, prevState: null };
+  const setError = (msg) => { $('menu-error').textContent = msg || ''; };
+  const busy = (on) => ['btn-solo', 'btn-host', 'btn-join'].forEach((id) => { $(id).disabled = on; });
+
+  function startSolo() {
+    if (game.state !== 'intro' || game.role !== 'solo') return;
     audio.start();
     restart();
-  };
-  window.addEventListener('keydown', startHandler);
-  window.addEventListener('pointerdown', startHandler);
-  if (AUTOPILOT) startHandler();
+  }
+
+  function setCoopStatus() {
+    const el = $('coop-status');
+    if (game.role === 'solo') { el.textContent = ''; return; }
+    const ping = link && link.ping != null ? ` · ${Math.round(link.ping)} ms` : '';
+    if (game.role === 'driver') {
+      el.textContent = link && link.open ? `👥 Beifahrer verbunden${ping}` : `👥 Warte auf Beifahrer · Code ${game.roomCode || '…'}`;
+    } else {
+      el.textContent = link && link.open ? `📖 Beifahrer · verbunden${ping}` : '📖 Verbindung zum Fahrer verloren';
+    }
+  }
+
+  function hostGame() {
+    setError('');
+    busy(true);
+    $('lobby').classList.remove('hidden');
+    $('lobby-status').textContent = 'Raum wird erstellt…';
+    game.role = 'driver';
+    notebook.setRole('driver');
+    hostRoom({
+      onCode: (code) => {
+        game.roomCode = code;
+        $('room-code').textContent = code;
+        $('lobby-status').textContent = 'Gib deinem Beifahrer diesen Code. Warte auf Beifahrer…';
+      },
+      onGuest: (l) => {
+        link = l;
+        link.send({ t: 'hello', seed: SEED });
+        link.onClose(() => setCoopStatus());
+        if (game.state === 'intro') {
+          $('lobby-status').textContent = 'Beifahrer verbunden! Bereit?';
+          $('btn-start').classList.remove('hidden');
+        } else if (game.state === 'finished') {
+          link.send({ t: 'finish', time: game.time, line: '' });
+        }
+      },
+      onError: (e) => { setError(e.message); },
+    });
+  }
+
+  async function joinGame(code) {
+    code = normalizeCode(code);
+    if (code.length !== 5) { setError('Der Code hat 5 Zeichen.'); return; }
+    setError('');
+    busy(true);
+    $('lobby').classList.remove('hidden');
+    $('room-code').textContent = code;
+    $('lobby-status').textContent = 'Verbinde mit dem Fahrer…';
+    try {
+      const l = await joinRoom(code);
+      const hello = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Der Fahrer antwortet nicht.')), 8000);
+        l.on('hello', (m) => { clearTimeout(timer); resolve(m); });
+      });
+      if (hello.seed !== SEED) {
+        // load the driver's stage, then join again automatically
+        l.close();
+        location.search = `?seed=${hello.seed}&join=${code}`;
+        return;
+      }
+      link = l;
+      game.roomCode = code;
+      becomeCodriver();
+    } catch (e) {
+      busy(false);
+      $('lobby').classList.add('hidden');
+      setError(e.message);
+    }
+  }
+
+  function becomeCodriver() {
+    game.role = 'codriver';
+    game.camMode = 0;
+    document.body.classList.add('codriver');
+    notebook.setRole('codriver');
+    $('overlay').classList.add('hidden');
+    $('hud').classList.remove('hidden');
+    $('message').textContent = 'Warte auf den Start…';
+    link.on('s', (m) => {
+      const off = performance.now() - m.ts;
+      // smallest observed delay = best estimate of the clock offset (drifts up slowly)
+      remote.offset = remote.offset === null ? off : Math.min(remote.offset + 0.05, off);
+      remote.buf.push(m);
+      if (remote.buf.length > 30) remote.buf.shift();
+    });
+    link.on('restart', () => {
+      remote.buf.length = 0; // drop states from the previous run
+      remote.lastSplits = 0;
+      $('splits').innerHTML = '';
+      $('result').classList.add('hidden');
+      $('overlay').classList.add('hidden');
+      notebook.sync(stage.startIndex - 4);
+    });
+    link.on('finish', (m) => { $('message').textContent = 'ZIEL!'; showResult(m.time, m.line || ''); });
+    link.onClose(() => {
+      setCoopStatus();
+      $('intro').classList.add('hidden');
+      const r = $('result');
+      r.innerHTML = '<p class="sub">Verbindung zum Fahrer verloren</p><button class="btn primary" id="btn-rejoin">Neu verbinden</button>';
+      r.classList.remove('hidden');
+      $('overlay').classList.remove('hidden');
+      $('btn-rejoin').onclick = () => { location.search = `?seed=${SEED}&join=${game.roomCode}`; };
+    });
+    // sound needs a click or key press in this tab
+    const unlock = () => {
+      audio.start();
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+  }
+
+  $('btn-solo').onclick = startSolo;
+  $('btn-host').onclick = hostGame;
+  $('btn-join').onclick = () => joinGame($('join-code').value);
+  $('join-code').addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') joinGame($('join-code').value);
+  });
+  $('btn-start').onclick = () => { audio.start(); restart(); };
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && game.state === 'intro' && game.role === 'solo' && document.activeElement !== $('join-code')) startSolo();
+  });
+  if (params.get('join')) { $('join-code').value = params.get('join'); joinGame(params.get('join')); }
+  else if (AUTOPILOT) startSolo();
+  setInterval(setCoopStatus, 500);
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -245,7 +384,10 @@ async function main() {
       // but with slightly smoothed rotation so bumps don't make the view jittery
       if (!cockpitInit) { cockpitQuat.copy(quat); cockpitInit = true; }
       cockpitQuat.slerp(quat, 1 - Math.exp(-dt * 22));
-      if (game.camMode === 0) headLocal.copy(car.headPosition);
+      if (game.camMode === 0) {
+        headLocal.copy(car.headPosition);
+        if (game.role === 'codriver') headLocal.z = -headLocal.z; // passenger seat
+      }
       else headLocal.set(1.25, 0.5, 0);
       headLocal.y -= 0.02;
       camera.position.copy(headLocal).applyQuaternion(quat).add(pos);
@@ -277,7 +419,92 @@ async function main() {
   const renderPos = new THREE.Vector3(), renderQuat = new THREE.Quaternion();
   const contact = { x: 0, y: 0, z: 0 };
 
-  window.__rally = { vehicle, stage, game, TUNING, restart, pacenotes, notebook, renderer, scene, camera, sun, world, autopilot, surfaceAt, placeAtIndex };
+  window.__rally = { vehicle, stage, game, TUNING, restart, pacenotes, notebook, getLink: () => link, renderer, scene, camera, sun, world, autopilot, surfaceAt, placeAtIndex };
+
+  // ---------- network state (driver sends, co-driver shows) ----------
+  let sendTick = 0;
+  const r3 = (v) => Math.round(v * 1000) / 1000;
+  function sendState() {
+    const t = vehicle.body.translation(), q = vehicle.body.rotation(), v = vehicle.body.linvel();
+    let contacts = 0, surf = 0;
+    for (let i = 0; i < 4; i++) {
+      if (vehicle.vc.wheelIsInContact(i)) contacts |= 1 << i;
+      if (vehicle.wheelSurface[i] === 'gravel') surf |= 1 << i;
+    }
+    link.send({
+      t: 's', ts: performance.now(),
+      p: [r3(t.x), r3(t.y), r3(t.z)], q: [r3(q.x), r3(q.y), r3(q.z), r3(q.w)], lv: [r3(v.x), r3(v.y), r3(v.z)],
+      v: r3(vehicle.speed), st: r3(vehicle.steer), r: Math.round(vehicle.rpm), g: vehicle.gear, th: r3(vehicle.throttle || 0),
+      i: game.trackIndex, tm: r3(game.time), gs: game.state, cd: r3(game.countdown),
+      w: [0, 1, 2, 3].map((i) => r3(vehicle.vc.wheelSuspensionLength(i) ?? TUNING.restLength)),
+      c: contacts, sf: surf, sl: vehicle.wheelSlip.map(r3), sp: game.splits,
+    });
+  }
+
+  remote.susp = [TUNING.restLength, TUNING.restLength, TUNING.restLength, TUNING.restLength];
+  remote.vel = { x: 0, y: 0, z: 0 };
+  remote.contacts = 15;
+  const qa = new THREE.Quaternion(), qb = new THREE.Quaternion();
+  function applyRemote(now) {
+    const buf = remote.buf;
+    if (!buf.length) return;
+    // show the car ~100 ms in the past so there are always two states to blend between
+    const target = now - remote.offset - 100;
+    let a = buf[0], b = buf[buf.length - 1];
+    for (let k = 0; k < buf.length - 1; k++) {
+      if (buf[k].ts <= target && buf[k + 1].ts >= target) { a = buf[k]; b = buf[k + 1]; break; }
+    }
+    if (target > b.ts) a = b;
+    const f = b.ts > a.ts ? Math.min(1, Math.max(0, (target - a.ts) / (b.ts - a.ts))) : 1;
+    renderPos.set(a.p[0] + (b.p[0] - a.p[0]) * f, a.p[1] + (b.p[1] - a.p[1]) * f, a.p[2] + (b.p[2] - a.p[2]) * f);
+    qa.set(a.q[0], a.q[1], a.q[2], a.q[3]);
+    qb.set(b.q[0], b.q[1], b.q[2], b.q[3]);
+    renderQuat.slerpQuaternions(qa, qb, f);
+    const s = f < 0.5 ? a : b;
+    vehicle.speed = a.v + (b.v - a.v) * f;
+    vehicle.steer = a.st + (b.st - a.st) * f;
+    vehicle.rpm = s.r; vehicle.gear = s.g; vehicle.throttle = s.th;
+    remote.susp = s.w; remote.contacts = s.c;
+    remote.vel = { x: s.lv[0], y: s.lv[1], z: s.lv[2] };
+    for (let i = 0; i < 4; i++) {
+      vehicle.wheelSlip[i] = s.sl[i];
+      vehicle.wheelSurface[i] = s.sf & (1 << i) ? 'gravel' : 'grass';
+    }
+    // progress, time and state come from the newest message
+    const latest = buf[buf.length - 1];
+    game.trackIndex = latest.i;
+    game.time = latest.tm;
+    game.countdown = latest.cd;
+    remote.prevState = remote.lastState;
+    remote.lastState = latest.gs;
+    game.state = latest.gs === 'intro' ? 'countdown' : latest.gs;
+    if (latest.sp.length < remote.lastSplits) { remote.lastSplits = 0; $('splits').innerHTML = ''; }
+    while (remote.lastSplits < latest.sp.length) {
+      const k = remote.lastSplits++;
+      $('splits').insertAdjacentHTML('beforeend', `<div>Split ${k + 1}: ${formatTime(latest.sp[k])}</div>`);
+    }
+  }
+
+  function updateCodriverMessages() {
+    const gs = remote.lastState;
+    if (!gs) return;
+    if (gs === 'countdown') {
+      const n = Math.ceil(game.countdown);
+      $('message').textContent = n > 3 ? '' : n > 0 ? String(n) : '';
+    } else if (gs === 'running' && remote.prevState === 'countdown') {
+      $('message').textContent = 'LOS!';
+      setTimeout(() => { if ($('message').textContent === 'LOS!') $('message').textContent = ''; }, 900);
+    } else if (gs === 'running' && $('message').textContent === 'Warte auf den Start…') {
+      $('message').textContent = '';
+    }
+  }
+
+  const wheelTmp = new THREE.Vector3();
+  function wheelGroundPoint(i) {
+    car.wheels[i].steerGroup.getWorldPosition(wheelTmp);
+    wheelTmp.y -= TUNING.wheelRadius;
+    return wheelTmp;
+  }
 
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
@@ -286,15 +513,16 @@ async function main() {
 
     // one-shot actions
     if (inp.actions.has('KeyM')) audio.toggleMute();
-    if (inp.actions.has('KeyB')) notebook.toggleBook();
-    if (inp.actions.has('KeyV')) notebook.toggleVoice();
+    if (inp.actions.has('KeyB') && game.role !== 'codriver') notebook.toggleBook();
+    if (inp.actions.has('KeyV') && game.role === 'solo') notebook.toggleVoice();
     if (inp.actions.has('KeyC')) {
       game.camMode = (game.camMode + 1) % 3;
       localStorage.setItem('rally.cam', String(game.camMode));
     }
-    if (inp.actions.has('KeyN')) { location.search = `?seed=${Math.floor(Math.random() * 99999) + 1}`; return; }
-    if (inp.actions.has('Enter') && game.state !== 'intro') restart();
-    if (inp.actions.has('KeyR') && (game.state === 'running' || game.state === 'countdown')) {
+    const isCo = game.role === 'codriver';
+    if (inp.actions.has('KeyN') && game.role === 'solo') { location.search = `?seed=${Math.floor(Math.random() * 99999) + 1}`; return; }
+    if (inp.actions.has('Enter') && game.state !== 'intro' && !isCo) restart();
+    if (!isCo && inp.actions.has('KeyR') && (game.state === 'running' || game.state === 'countdown')) {
       placeAtIndex(Math.max(stage.startIndex - 4, game.trackIndex - 3));
     }
 
@@ -302,22 +530,29 @@ async function main() {
     if (game.state === 'intro' || game.state === 'countdown') drive = { throttle: 0, brake: 0, steer: inp.steer, handbrake: true };
     if (game.state === 'finished') drive = { throttle: 0, brake: 0.6, steer: 0, handbrake: false };
 
-    acc += dt;
-    while (acc >= STEP) {
-      vehicle.step(STEP, drive, surfaceAt);
-      world.step();
-      snapshot();
-      acc -= STEP;
-      if (game.state === 'running') game.time += STEP;
+    if (isCo) {
+      applyRemote(now);
+    } else {
+      acc += dt;
+      while (acc >= STEP) {
+        vehicle.step(STEP, drive, surfaceAt);
+        world.step();
+        snapshot();
+        acc -= STEP;
+        if (game.state === 'running') game.time += STEP;
+        if (game.role === 'driver' && link && link.open && ++sendTick % 3 === 0) sendState();
+      }
     }
 
     // track progress
-    const p = vehicle.body.translation();
-    game.trackIndex = stage.nearestTracked(p.x, p.z, game.trackIndex);
+    const p = isCo ? renderPos : vehicle.body.translation();
+    if (!isCo) game.trackIndex = stage.nearestTracked(p.x, p.z, game.trackIndex);
     const ti = game.trackIndex;
     const distFromRoad = Math.hypot(stage.xs[ti] - p.x, stage.zs[ti] - p.z);
 
-    if (game.state === 'countdown') {
+    if (isCo) {
+      updateCodriverMessages();
+    } else if (game.state === 'countdown') {
       game.countdown -= dt;
       const n = Math.ceil(game.countdown);
       $('message').textContent = n > 3 ? '' : n > 0 ? String(n) : '';
@@ -327,7 +562,7 @@ async function main() {
         setTimeout(() => { if ($('message').textContent === 'LOS!') $('message').textContent = ''; }, 900);
       }
     }
-    if (game.state === 'running') {
+    if (game.state === 'running' && !isCo) {
       const k = game.splits.length;
       if (k < stage.splitIndices.length && ti >= stage.splitIndices[k] && distFromRoad < 25) {
         game.splits.push(game.time);
@@ -348,40 +583,43 @@ async function main() {
     notebook.update(ti, vehicle.speed, game.state === 'running');
 
     // stuck / off-road helpers
-    const up = vehicle.up();
+    const up = isCo ? { y: 1 } : vehicle.up();
     if (up.y < 0.25 && Math.abs(vehicle.speed) < 2) game.flipTimer += dt; else game.flipTimer = 0;
-    if (game.flipTimer > 2.5 || p.y < -200) placeAtIndex(game.trackIndex);
+    if (!isCo && (game.flipTimer > 2.5 || p.y < -200)) placeAtIndex(game.trackIndex);
     let hint = '';
-    if (game.state === 'running') {
+    if (game.state === 'running' && !isCo) {
       if (game.flipTimer > 0.6) hint = 'Überschlagen – gleich geht’s weiter';
       else if (distFromRoad > 35) hint = 'Weit weg von der Strecke – R drücken';
     }
     $('hint').textContent = hint;
 
     // visuals
-    const alpha = acc / STEP;
-    renderPos.lerpVectors(prevPos, currPos, alpha);
-    renderQuat.slerpQuaternions(prevQuat, currQuat, alpha);
+    if (!isCo) {
+      const alpha = acc / STEP;
+      renderPos.lerpVectors(prevPos, currPos, alpha);
+      renderQuat.slerpQuaternions(prevQuat, currQuat, alpha);
+    }
     car.root.position.copy(renderPos);
     car.root.quaternion.copy(renderQuat);
     for (let i = 0; i < 4; i++) {
       const w = car.wheels[i];
       const wp = vehicle.wheelPositions[i];
-      const len = vehicle.vc.wheelSuspensionLength(i) ?? TUNING.restLength;
+      const len = isCo ? remote.susp[i] : vehicle.vc.wheelSuspensionLength(i) ?? TUNING.restLength;
       w.steerGroup.position.set(wp.x, wp.y - len, wp.z);
       w.steerGroup.rotation.y = i < 2 ? vehicle.steer : 0;
+      if (isCo) vehicle.wheelSpin[i] += (vehicle.speed * dt) / TUNING.wheelRadius;
       w.spin.rotation.z = -vehicle.wheelSpin[i];
     }
 
     // dust
-    const vel = vehicle.body.linvel();
+    const vel = isCo ? remote.vel : vehicle.body.linvel();
     const sp = Math.abs(vehicle.speed);
     for (let i = 0; i < 4; i++) {
-      if (!vehicle.vc.wheelIsInContact(i)) continue;
+      if (isCo ? !(remote.contacts & (1 << i)) : !vehicle.vc.wheelIsInContact(i)) continue;
       const grass = vehicle.wheelSurface[i] === 'grass';
       const amount = Math.min(1, sp / 28) * (grass ? 0.25 : 0.6) + vehicle.wheelSlip[i] * Math.min(1, sp / 6) * 0.9;
       let n = amount * dt * 55;
-      const cp = vehicle.vc.wheelContactPoint(i, contact);
+      const cp = isCo ? wheelGroundPoint(i) : vehicle.vc.wheelContactPoint(i, contact);
       if (!cp) continue;
       while (n > 0) {
         if (n >= 1 || Math.random() < n) {
@@ -409,7 +647,7 @@ async function main() {
 
     const onGravel = vehicle.wheelSurface.filter((s) => s === 'gravel').length >= 2;
     const slip = Math.max(...vehicle.wheelSlip);
-    audio.update(vehicle.rpm, drive.throttle, vehicle.speed, slip, onGravel);
+    audio.update(vehicle.rpm, isCo ? vehicle.throttle : drive.throttle, vehicle.speed, slip, onGravel);
 
     renderer.render(scene, camera);
     requestAnimationFrame(frame);

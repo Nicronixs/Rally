@@ -25,9 +25,10 @@
       <div id="rpm-bar"><div id="rpm-fill"></div></div>
     </div>
     <div id="notebook">
-      <div id="notebook-title">Aufschrieb <span id="voice-state"></span></div>
+      <div id="notebook-title">Aufschrieb <span id="notebook-dist"></span><span id="voice-state"></span></div>
       <div id="notebook-list"></div>
     </div>
+    <div id="coop-status"></div>
     <div id="message"></div>
     <div id="hint"></div>
   </div>
@@ -52,7 +53,28 @@
           <tr><td>N</td><td>Neue Strecke</td></tr>
         </table>
         <p class="small">Gamepad: RT Gas · LT Bremse · A Handbremse · Y Zurücksetzen</p>
-        <p class="start">Drücke eine Taste zum Starten</p>
+        <div id="menu">
+          <button id="btn-solo" class="btn primary">Allein fahren <span class="small">(Enter)</span></button>
+          <div class="menu-coop">
+            <div class="menu-col">
+              <div class="menu-label">Koop · Fahrer</div>
+              <button id="btn-host" class="btn">Raum erstellen</button>
+            </div>
+            <div class="menu-col">
+              <div class="menu-label">Koop · Beifahrer</div>
+              <div class="join-row">
+                <input id="join-code" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" />
+                <button id="btn-join" class="btn">Beitreten</button>
+              </div>
+            </div>
+          </div>
+          <div id="lobby" class="hidden">
+            <div id="room-code"></div>
+            <div id="lobby-status"></div>
+            <button id="btn-start" class="btn primary hidden">Etappe starten</button>
+          </div>
+          <p id="menu-error"></p>
+        </div>
       </div>
       <div id="result" class="hidden"></div>
     </div>
