@@ -391,8 +391,9 @@ async function main() {
     enterAction = goOn;
   }
 
-  function wireCards(root, onPick) {
-    root.querySelectorAll('.cards').forEach((strip) => {
+  // horizontal car strips: mouse wheel scrolls sideways, the selected car is centred
+  function wireStrips(root) {
+    root.querySelectorAll('.cards, .g-cars').forEach((strip) => {
       // mouse wheel scrolls the car strip sideways while there is room in that direction
       strip.addEventListener('wheel', (e) => {
         if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
@@ -402,9 +403,22 @@ async function main() {
           strip.scrollLeft += e.deltaY;
         }
       }, { passive: false });
-      const sel = strip.querySelector('.selected');
-      if (sel) { strip.style.scrollBehavior = 'auto'; strip.scrollLeft = sel.offsetLeft - strip.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2; strip.style.scrollBehavior = ''; }
     });
+    centerStrips(root);
+  }
+
+  function centerStrips(root) {
+    root.querySelectorAll('.cards, .g-cars').forEach((strip) => {
+      const sel = strip.querySelector('.selected, .active');
+      if (!sel || !strip.clientWidth) return; // hidden tab: centred when it is opened
+      strip.style.scrollBehavior = 'auto';
+      strip.scrollLeft = sel.offsetLeft - strip.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
+      strip.style.scrollBehavior = '';
+    });
+  }
+
+  function wireCards(root, onPick) {
+    wireStrips(root);
     root.querySelectorAll('[data-car]').forEach((el) => {
       el.onclick = () => {
         root.querySelectorAll('[data-car]').forEach((x) => x.classList.toggle('selected', x.dataset.car === el.dataset.car));
@@ -475,6 +489,7 @@ async function main() {
         scr.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === t));
         scr.querySelectorAll('section[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== t.dataset.tab));
         sessionStorage.setItem('rally.tab', t.dataset.tab);
+        centerStrips(scr);
       };
     });
     const lastTab = sessionStorage.getItem('rally.tab');
@@ -491,7 +506,12 @@ async function main() {
       showMenu();
     };
     const renderGarage = (msg) => {
+      const oldStrip = $('garage').querySelector('.g-cars');
+      const keepScroll = oldStrip ? oldStrip.scrollLeft : null;
       $('garage').innerHTML = garageHtml(PROFILE, garageCar) + (msg ? `<p class="small g-msg">${msg}</p>` : '');
+      wireStrips($('garage'));
+      const strip = $('garage').querySelector('.g-cars');
+      if (strip && keepScroll !== null && strip.clientWidth) { strip.style.scrollBehavior = 'auto'; strip.scrollLeft = keepScroll; strip.style.scrollBehavior = ''; }
       scr.querySelector('.wallet').textContent = `💰 ${formatMoney(PROFILE.money)}`;
       $('garage').querySelectorAll('[data-g-car]').forEach((b) => { b.onclick = () => { garageCar = b.dataset.gCar; sessionStorage.setItem('rally.garageCar', garageCar); renderGarage(); }; });
       $('garage').querySelectorAll('[data-g-buycar]').forEach((b) => {
