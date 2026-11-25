@@ -92,6 +92,10 @@ npm run models -- car nature gate --preview
 
 Das Spiel färbt die Materialien nach Namen ein (`Paint`, `Stripe`, `Accent`, `Rim` aus der Lackierung des Autos; Bäume und Felsen bekommen pro Exemplar einen Farbton) und blendet im Cockpit `Glass` und die eigene Figur aus.
 
+## Texturen
+
+Straßen- und Bodentexturen sind Fotos von [Poly Haven](https://polyhaven.com) (CC0): `rocky_trail` (Schotter), `asphalt_track`, `snow_02`, `dense_sand`, `aerial_grass_rock`. Sie liegen verkleinert in `public/textures/` (zusammen ca. 1,2 MB). Das Spiel färbt sie auf die Farben des jeweiligen Untergrunds um und legt auf der Straße Fahrspuren, Linien und weiche Ränder darüber. Welche Textur zu welchem Untergrund gehört, steht in `src/environments.js` (`textures`). Fehlen die Dateien, fällt das Spiel auf die einfache, selbst gezeichnete Optik zurück.
+
 ## Aufbau
 
 | Datei | Inhalt |

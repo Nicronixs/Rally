@@ -1,0 +1,2 @@
+# Texturen von Poly Haven (https://polyhaven.com), Lizenz CC0.
+# rocky_trail, asphalt_track, snow_02, dense_sand, aerial_grass_rock - verkleinert fuer das Spiel.

@@ -57,7 +57,7 @@ function grassTexture() {
   return tex;
 }
 
-export function buildTerrain(stage, world, scene) {
+export function buildTerrain(stage, world, scene, tex = null) {
   const terrainHeight = makeTerrainHeight(stage);
   const b = stage.bounds;
   const minCX = Math.floor((b.minX - CORRIDOR) / CHUNK_SIZE);
@@ -75,10 +75,13 @@ export function buildTerrain(stage, world, scene) {
   }
 
   const material = new THREE.MeshStandardMaterial({
-    vertexColors: true, map: grassTexture(), roughness: 0.95, metalness: 0,
+    vertexColors: true, map: tex ? tex.diff : grassTexture(), roughness: 0.95, metalness: 0,
+    ...(tex ? { normalMap: tex.nor, normalScale: new THREE.Vector2(0.7, 0.7) } : {}),
   });
 
   const G = stage.env.ground;
+  const uvTile = tex ? tex.tile : 6;
+  const inv = tex ? new THREE.Color(1 / Math.max(0.05, tex.avg.r), 1 / Math.max(0.05, tex.avg.g), 1 / Math.max(0.05, tex.avg.b)) : null;
   const grass = new THREE.Color(G.a), grass2 = new THREE.Color(G.b);
   const dirt = new THREE.Color(G.shoulder), rock = new THREE.Color(G.rock);
   const tmp = new THREE.Color();
@@ -119,7 +122,7 @@ export function buildTerrain(stage, world, scene) {
           const l = Math.hypot(nx, ny, nz);
           nx /= l; ny /= l; nz /= l;
           nor[v * 3] = nx; nor[v * 3 + 1] = ny; nor[v * 3 + 2] = nz;
-          uv[v * 2] = x / 6; uv[v * 2 + 1] = z / 6;
+          uv[v * 2] = x / uvTile; uv[v * 2 + 1] = z / uvTile;
           hf[c * N + r] = y; // column-major for Rapier: column = x, row = z
 
           // colour
@@ -129,6 +132,7 @@ export function buildTerrain(stage, world, scene) {
           const slope = 1 - ny;
           tmp.lerp(rock, smoothstep(0.12, 0.3, slope));
           tmp.lerp(dirt, 1 - smoothstep(hw + 0.5, hw + 4.5, d));
+          if (tex) tmp.multiply(inv); // the photo's own colour is divided out, the environment's colour stays
           col[v * 3] = tmp.r; col[v * 3 + 1] = tmp.g; col[v * 3 + 2] = tmp.b;
         }
       }

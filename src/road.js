@@ -43,7 +43,60 @@ function roadTexture(look) {
   return tex;
 }
 
-export function buildRoad(stage, scene, env) {
+// Road texture from a photo: tiled photo (one canvas = 14 m of road), darker wheel tracks,
+// white lines on tarmac and a soft transparent edge.
+const ROAD_TEX_LENGTH = 14; // metres of road per texture repeat (matches the road UVs)
+function photoRoadTexture(look, img, tile, widthM) {
+  const W = 512, H = 768;
+  const tx = Math.round((tile / widthM) * W), ty = Math.round((tile / ROAD_TEX_LENGTH) * H);
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  // seamless photo tiles; across the road the start is shifted so the tile border is not on the centre line
+  for (let y = 0; y < H; y += ty) for (let x = -tx * 0.37; x < W; x += tx) g.drawImage(img, x, y, tx, ty);
+  // re-tint the photo to the environment's road colour (keeps sand warm, snow bright, tarmac dark)
+  const px = g.getImageData(0, 0, W, H);
+  const d = px.data;
+  let ar = 0, ag = 0, ab = 0;
+  for (let i = 0; i < d.length; i += 4) { ar += d[i]; ag += d[i + 1]; ab += d[i + 2]; }
+  const n = d.length / 4;
+  const tint = look.tint || [1, 1, 1];
+  const kr = (look.base[0] * tint[0]) / (ar / n), kg = (look.base[1] * tint[1]) / (ag / n), kb = (look.base[2] * tint[2]) / (ab / n);
+  for (let i = 0; i < d.length; i += 4) { d[i] *= kr; d[i + 1] *= kg; d[i + 2] *= kb; }
+  g.putImageData(px, 0, 0);
+  // compacted wheel tracks
+  g.globalCompositeOperation = 'multiply';
+  const k = Math.round(255 * (1 - look.tracks / 140));
+  const tracks = g.createLinearGradient(0, 0, W, 0);
+  for (const [u, dark] of [[0, 0], [0.22, 0], [0.3, 1], [0.38, 0], [0.62, 0], [0.7, 1], [0.78, 0], [1, 0]]) {
+    const v = dark ? k : 255;
+    tracks.addColorStop(u, `rgb(${v},${v},${v})`);
+  }
+  g.fillStyle = tracks;
+  g.fillRect(0, 0, W, H);
+  g.globalCompositeOperation = 'source-over';
+  if (look.lines) {
+    g.fillStyle = 'rgba(238,238,238,0.95)';
+    g.fillRect(Math.round(W * 0.085), 0, Math.round(W * 0.02), H);
+    g.fillRect(Math.round(W * 0.895), 0, Math.round(W * 0.02), H);
+    for (let y = 0; y < H; y += 128) g.fillRect(Math.round(W * 0.495), y, Math.round(W * 0.012), 70);
+  }
+  // soft edges into the terrain
+  g.globalCompositeOperation = 'destination-in';
+  const e = look.lines ? 0.05 : 0.1;
+  const edge = g.createLinearGradient(0, 0, W, 0);
+  edge.addColorStop(0, 'rgba(0,0,0,0)'); edge.addColorStop(e, 'rgba(0,0,0,1)');
+  edge.addColorStop(1 - e, 'rgba(0,0,0,1)'); edge.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = edge;
+  g.fillRect(0, 0, W, H);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+export function buildRoad(stage, scene, env, tex = null) {
   const hw = stage.halfWidth + 0.5;
   const COLS = 7, STEP = 2;
   const rows = Math.floor((stage.count - 1) / STEP) + 1;
@@ -78,9 +131,17 @@ export function buildRoad(stage, scene, env) {
   const n = geo.getAttribute('normal');
   if (n.getY(0) < 0) { for (let k = 0; k < index.length; k += 3) { const t = index[k + 1]; index[k + 1] = index[k + 2]; index[k + 2] = t; } geo.setIndex(index); geo.computeVertexNormals(); }
   const mat = new THREE.MeshStandardMaterial({
-    map: roadTexture(env.road), transparent: true, depthWrite: false, roughness: env.road.lines ? 0.85 : 1,
+    map: tex ? photoRoadTexture(env.road, tex.diff.image, tex.tile, hw * 2) : roadTexture(env.road),
+    transparent: true, depthWrite: false, roughness: env.road.lines ? 0.85 : 1,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   });
+  if (tex) {
+    const nor = tex.nor.clone();
+    nor.repeat.set((hw * 2) / tex.tile, ROAD_TEX_LENGTH / tex.tile);
+    nor.needsUpdate = true;
+    mat.normalMap = nor;
+    mat.normalScale.set(0.9, 0.9);
+  }
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.renderOrder = 1;
