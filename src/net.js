@@ -3,6 +3,36 @@
 import Peer from 'peerjs';
 
 const PREFIX = 'rallykoop-v1-';
+
+// How the two browsers find a path to each other. STUN servers reveal the public address
+// (enough for most home routers). Behind strict NATs (mobile networks, carrier-grade NAT)
+// only a TURN relay helps; it can be set at build time (VITE_TURN_URLS, VITE_TURN_USERNAME,
+// VITE_TURN_CREDENTIAL) or in the browser: localStorage['rally.turn'] = '{"urls":[...],"username":"...","credential":"..."}'.
+function iceServers() {
+  const list = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+  ];
+  const env = import.meta.env;
+  // TURN needs credentials; without them the browser would reject the whole configuration
+  if (env.VITE_TURN_URLS && env.VITE_TURN_USERNAME && env.VITE_TURN_CREDENTIAL) {
+    list.push({ urls: env.VITE_TURN_URLS.split(','), username: env.VITE_TURN_USERNAME, credential: env.VITE_TURN_CREDENTIAL });
+  }
+  try {
+    const own = JSON.parse(localStorage.getItem('rally.turn') || 'null');
+    if (own && own.urls) list.push(own);
+  } catch { /* ignore broken setting */ }
+  return list;
+}
+const PEER_OPTIONS = () => ({ debug: 0, config: { iceServers: iceServers() } });
+export const hasTurn = () => iceServers().some((s) => [].concat(s.urls).some((u) => u.startsWith('turn')));
+
+export const NAT_MESSAGE = 'Keine direkte Verbindung möglich – eure Netzwerke (Router, Mobilfunk) blockieren sie. '
+  + 'Abhilfe: im selben WLAN spielen oder einen TURN-Server einrichten.';
+
+class NetError extends Error {
+  constructor(message, kind) { super(message); this.kind = kind; }
+}
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export function randomCode() {
@@ -87,15 +117,16 @@ export class Link {
 // (a reconnecting co-driver replaces the previous connection).
 // preferredCode: reopen the same room after the page was reloaded for the next stage;
 // the server may still hold the old id for a few seconds, so keep retrying it.
-export function hostRoom({ preferredCode, onCode, onGuest, onError }) {
+export function hostRoom({ preferredCode, onCode, onGuest, onGuestFailed, onError }) {
   let attempts = 0;
   let current = null;
   const tryOpen = () => {
     const code = preferredCode && attempts < 12 ? preferredCode : randomCode();
-    const peer = new Peer(PREFIX + code, { debug: 0 });
+    const peer = new Peer(PREFIX + code, PEER_OPTIONS());
     window.addEventListener('beforeunload', () => peer.destroy());
     peer.on('open', () => onCode(code));
     peer.on('connection', (conn) => {
+      conn.on('iceStateChanged', (state) => { if (state === 'failed' && onGuestFailed) onGuestFailed(); });
       conn.on('open', () => {
         if (current && current.open) current.conn.close();
         current = new Link(conn, peer);
@@ -117,15 +148,34 @@ export function hostRoom({ preferredCode, onCode, onGuest, onError }) {
 }
 
 // Co-driver: join a room by code.
+// Errors carry a kind: 'not-found' (no such room), 'nat' (networks block a direct link),
+// 'timeout' or 'server' (worth retrying, e.g. while the driver loads the next stage).
 export function joinRoom(code) {
   return new Promise((resolve, reject) => {
-    const peer = new Peer({ debug: 0 });
+    const peer = new Peer(PEER_OPTIONS());
     window.addEventListener('beforeunload', () => peer.destroy());
-    const timer = setTimeout(() => { peer.destroy(); reject(new Error('Zeitüberschreitung – ist der Fahrer noch im Raum?')); }, 10000);
+    let finished = false;
+    const fail = (err) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      peer.destroy();
+      reject(err);
+    };
+    const timer = setTimeout(() => fail(new NetError('Zeitüberschreitung – ist der Fahrer noch im Raum?', 'timeout')), 15000);
     peer.on('open', () => {
       const conn = peer.connect(PREFIX + normalizeCode(code), { reliable: true, serialization: 'json' });
-      conn.on('open', () => { clearTimeout(timer); resolve(new Link(conn, peer)); });
+      conn.on('iceStateChanged', (state) => { if (state === 'failed') fail(new NetError(NAT_MESSAGE, 'nat')); });
+      conn.on('open', () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        resolve(new Link(conn, peer));
+      });
     });
-    peer.on('error', (err) => { clearTimeout(timer); peer.destroy(); reject(new Error(errorText(err))); });
+    peer.on('error', (err) => {
+      const kind = err.type === 'peer-unavailable' ? 'not-found' : 'server';
+      fail(new NetError(errorText(err), kind));
+    });
   });
 }

@@ -11,7 +11,7 @@ import { CarAudio } from './audio.js';
 import { Input } from './input.js';
 import { buildPacenotes } from './pacenotes.js';
 import { PacenoteUI } from './pacenoteUI.js';
-import { hostRoom, joinRoom, normalizeCode } from './net.js';
+import { hostRoom, joinRoom, normalizeCode, NAT_MESSAGE } from './net.js';
 import { getEnvironment } from './environments.js';
 import { getCar } from './cars.js';
 import {
@@ -369,6 +369,10 @@ async function main() {
         link.onClose(() => setCoopStatus());
         if (game.state === 'finished') link.send({ t: 'finish', time: game.time + game.penalty, line: '' });
       },
+      onGuestFailed: () => {
+        setError(NAT_MESSAGE);
+        $('coop-status').textContent = '👥 Beifahrer kommt nicht durch (Netzwerk blockiert)';
+      },
       onError: (e) => setError(e.message),
     });
   }
@@ -397,8 +401,10 @@ async function main() {
       car.setDamage(vehicle.damage);
       becomeCodriver();
     } catch (e) {
-      // the driver may be loading the next stage: keep trying for a while
-      if (retries < 25) { setTimeout(() => joinGame(code, retries + 1), 2000); return; }
+      // the driver may be loading the next stage: keep trying for a while,
+      // but a wrong code or blocked networks will not fix themselves
+      const final = e.kind === 'nat' || (e.kind === 'not-found' && retries >= 3);
+      if (!final && retries < 20) { setTimeout(() => joinGame(code, retries + 1), 2000); return; }
       showOverlay(`<p class="sub">${e.message}</p><button class="btn primary" id="j-retry">Nochmal versuchen</button><button class="btn ghost" id="j-menu">Hauptmenü</button>`);
       $('j-retry').onclick = () => location.reload();
       $('j-menu').onclick = () => go('');

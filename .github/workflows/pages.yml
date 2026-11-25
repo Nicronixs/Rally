@@ -26,6 +26,11 @@ jobs:
       # npm install (not ci): the lock file is made on Windows and lacks some Linux-only optional packages
       - run: npm install --no-audit --no-fund
       - run: npm run build
+        env:
+          # TURN relay for co-op across strict networks (repository secrets, see README)
+          VITE_TURN_URLS: ${{ secrets.TURN_URLS || 'turn:global.relay.metered.ca:80,turn:global.relay.metered.ca:80?transport=tcp,turn:global.relay.metered.ca:443,turns:global.relay.metered.ca:443?transport=tcp' }}
+          VITE_TURN_USERNAME: ${{ secrets.TURN_USERNAME }}
+          VITE_TURN_CREDENTIAL: ${{ secrets.TURN_CREDENTIAL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

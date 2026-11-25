@@ -35,7 +35,15 @@ Damit das zweite Gerät das Spiel überhaupt öffnen kann, muss es erreichbar se
 - im selben WLAN: `npm run dev -- --host` und auf dem zweiten Gerät `http://<IP-des-PCs>:5173` öffnen
 - über das Internet: https://nicronixs.github.io/Rally/ öffnen
 
-Die Verbindung selbst läuft direkt zwischen den beiden Browsern (WebRTC); der öffentliche PeerJS-Server vermittelt nur den Code. In sehr strengen Netzwerken (manche Firmen-/Uni-Netze) kann die direkte Verbindung scheitern.
+Die Verbindung läuft direkt zwischen den beiden Browsern (WebRTC); der öffentliche PeerJS-Server vermittelt nur den Code. Viele Router und Mobilfunknetze blockieren direkte Verbindungen – dann hilft nur ein **TURN-Relay**. Dafür im GitHub-Repo unter *Settings → Secrets and variables → Actions* eintragen:
+
+| Secret | Inhalt |
+|---|---|
+| `TURN_USERNAME` | Benutzername des TURN-Zugangs (z. B. von metered.ca) |
+| `TURN_CREDENTIAL` | Passwort des TURN-Zugangs |
+| `TURN_URLS` | optional, kommagetrennt; Standard sind die Metered-Server `global.relay.metered.ca` |
+
+Danach den Workflow neu laufen lassen (Actions → GitHub Pages → Run workflow). Zum Ausprobieren ohne Build geht auch im Browser: `localStorage['rally.turn'] = '{"urls":["turn:…"],"username":"…","credential":"…"}'`.
 
 ## Steuerung
 
