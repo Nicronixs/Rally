@@ -8,6 +8,8 @@ import { buildCarModel } from './carModel.js';
 import { Dust } from './effects.js';
 import { CarAudio } from './audio.js';
 import { Input } from './input.js';
+import { buildPacenotes } from './pacenotes.js';
+import { PacenoteUI } from './pacenoteUI.js';
 
 const $ = (id) => document.getElementById(id);
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
@@ -85,6 +87,8 @@ async function main() {
   const dust = new Dust(scene);
   const audio = new CarAudio();
   const input = new Input();
+  const pacenotes = buildPacenotes(stage);
+  const notebook = new PacenoteUI(pacenotes);
 
   // ---------- game state ----------
   const stageKm = ((stage.finishIndex - stage.startIndex) / 1000).toFixed(2).replace('.', ',');
@@ -109,6 +113,7 @@ async function main() {
     game.trackIndex = i;
     snapshot();
     copySnapshot();
+    notebook.sync(i);
   }
 
   function restart() {
@@ -249,7 +254,7 @@ async function main() {
   const renderPos = new THREE.Vector3(), renderQuat = new THREE.Quaternion();
   const contact = { x: 0, y: 0, z: 0 };
 
-  window.__rally = { vehicle, stage, game, TUNING, restart, renderer, scene, camera, sun, world, autopilot, surfaceAt, placeAtIndex };
+  window.__rally = { vehicle, stage, game, TUNING, restart, pacenotes, notebook, renderer, scene, camera, sun, world, autopilot, surfaceAt, placeAtIndex };
 
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
@@ -258,6 +263,8 @@ async function main() {
 
     // one-shot actions
     if (inp.actions.has('KeyM')) audio.toggleMute();
+    if (inp.actions.has('KeyB')) notebook.toggleBook();
+    if (inp.actions.has('KeyV')) notebook.toggleVoice();
     if (inp.actions.has('KeyC')) game.camMode = (game.camMode + 1) % 2;
     if (inp.actions.has('KeyN')) { location.search = `?seed=${Math.floor(Math.random() * 99999) + 1}`; return; }
     if (inp.actions.has('Enter') && game.state !== 'intro') restart();
@@ -311,6 +318,8 @@ async function main() {
         finish();
       }
     }
+
+    notebook.update(ti, vehicle.speed, game.state === 'running');
 
     // stuck / off-road helpers
     const up = vehicle.up();
