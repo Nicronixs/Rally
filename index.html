@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rally Koop</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="timer-box">
+      <div id="timer">0:00.00</div>
+      <div id="splits"></div>
+    </div>
+    <div id="progress-box">
+      <div id="progress-label">Noch 0,0 km</div>
+      <div id="progress-bar"><div id="progress-fill"></div></div>
+    </div>
+    <div id="speedo">
+      <div id="speed">0</div>
+      <div id="speed-unit">km/h</div>
+      <div id="gear">1</div>
+      <div id="rpm-bar"><div id="rpm-fill"></div></div>
+    </div>
+    <div id="message"></div>
+    <div id="hint"></div>
+  </div>
+
+  <div id="overlay">
+    <div class="panel" id="panel">
+      <h1>Rally Koop</h1>
+      <p class="sub" id="loading">Lade Physik…</p>
+      <div id="intro" class="hidden">
+        <p class="sub" id="stage-info"></p>
+        <table class="keys">
+          <tr><td>W / ↑</td><td>Gas</td></tr>
+          <tr><td>S / ↓</td><td>Bremse / Rückwärts</td></tr>
+          <tr><td>A D / ← →</td><td>Lenken</td></tr>
+          <tr><td>Leertaste</td><td>Handbremse</td></tr>
+          <tr><td>R</td><td>Zurück auf die Strecke</td></tr>
+          <tr><td>C</td><td>Kamera wechseln</td></tr>
+          <tr><td>M</td><td>Ton an/aus</td></tr>
+          <tr><td>Enter</td><td>Etappe neu starten</td></tr>
+          <tr><td>N</td><td>Neue Strecke</td></tr>
+        </table>
+        <p class="small">Gamepad: RT Gas · LT Bremse · A Handbremse · Y Zurücksetzen</p>
+        <p class="start">Drücke eine Taste zum Starten</p>
+      </div>
+      <div id="result" class="hidden"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

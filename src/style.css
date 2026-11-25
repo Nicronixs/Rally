@@ -1,0 +1,42 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #b9cde0; font-family: 'Segoe UI', Arial, sans-serif; color: #fff; }
+#game { display: block; width: 100vw; height: 100vh; }
+.hidden { display: none !important; }
+
+#hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+
+#timer-box { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); text-align: center; }
+#timer { font-size: 42px; font-weight: 700; font-variant-numeric: tabular-nums; background: rgba(10, 14, 20, 0.55); padding: 4px 22px; border-radius: 8px; letter-spacing: 1px; }
+#splits { margin-top: 6px; font-size: 17px; font-variant-numeric: tabular-nums; }
+#splits div { background: rgba(10, 14, 20, 0.45); margin-top: 3px; padding: 2px 10px; border-radius: 5px; }
+.faster { color: #6dff8a; }
+.slower { color: #ff7a6b; }
+
+#progress-box { position: absolute; left: 24px; bottom: 26px; width: 260px; }
+#progress-label { font-size: 16px; margin-bottom: 6px; }
+#progress-bar { height: 8px; background: rgba(10, 14, 20, 0.5); border-radius: 4px; overflow: hidden; }
+#progress-fill { height: 100%; width: 0; background: #ffd400; }
+
+#speedo { position: absolute; right: 28px; bottom: 22px; text-align: right; background: rgba(10, 14, 20, 0.5); padding: 10px 18px 12px; border-radius: 10px; min-width: 170px; }
+#speed { font-size: 56px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+#speed-unit { font-size: 14px; opacity: 0.8; }
+#gear { position: absolute; left: 16px; top: 10px; font-size: 30px; font-weight: 800; color: #ffd400; }
+#rpm-bar { margin-top: 8px; height: 6px; background: rgba(255, 255, 255, 0.15); border-radius: 3px; overflow: hidden; }
+#rpm-fill { height: 100%; width: 0; background: linear-gradient(90deg, #4fd1ff, #ffd400 70%, #ff4b3a); }
+
+#message { position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%); font-size: 96px; font-weight: 900; letter-spacing: 2px; }
+#hint { position: absolute; top: 58%; left: 50%; transform: translateX(-50%); font-size: 22px; background: rgba(10, 14, 20, 0.55); padding: 6px 16px; border-radius: 6px; }
+#hint:empty { display: none; }
+
+#overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(12, 18, 26, 0.45); }
+.panel { background: rgba(14, 19, 27, 0.9); padding: 28px 40px; border-radius: 14px; min-width: 380px; text-align: center; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); }
+.panel h1 { margin: 0 0 6px; font-size: 40px; letter-spacing: 3px; color: #ffd400; }
+.sub { margin: 4px 0 14px; opacity: 0.85; }
+.keys { margin: 0 auto; border-collapse: collapse; text-align: left; }
+.keys td { padding: 3px 12px; }
+.keys td:first-child { color: #ffd400; font-weight: 600; text-align: right; }
+.small { font-size: 13px; opacity: 0.7; }
+.start { margin-top: 18px; font-size: 20px; font-weight: 700; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.45; } }
+.result-time { font-size: 52px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 8px 0; }
+.result-best { font-size: 18px; margin-bottom: 14px; }
