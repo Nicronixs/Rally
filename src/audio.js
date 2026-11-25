@@ -57,6 +57,54 @@ export class CarAudio {
     this.noise.connect(this.gravelFilter).connect(this.gravelGain).connect(this.master);
     this.noise.start();
     this.loadEngine();
+    this.loadSurface();
+  }
+
+  // loads a sound and levels it: loops to an even loudness, hits to a fixed peak;
+  // buf.lead is the silence before a hit starts (skipped when it is played)
+  async loadBuffer(name, kind = 'loop') {
+    const r = await fetch(`${import.meta.env.BASE_URL}sounds/${name}.mp3`);
+    if (!r.ok) throw new Error(name);
+    const buf = await this.ctx.decodeAudioData(await r.arrayBuffer());
+    const chans = [...Array(buf.numberOfChannels)].map((_, c) => buf.getChannelData(c));
+    const x = chans[0];
+    let sum = 0, peak = 0;
+    for (let i = 0; i < x.length; i++) { sum += x[i] * x[i]; peak = Math.max(peak, Math.abs(x[i])); }
+    const scale = kind === 'loop' ? 0.12 / Math.max(1e-4, Math.sqrt(sum / x.length)) : 0.9 / Math.max(1e-4, peak);
+    const k = Math.min(30, scale);
+    for (const ch of chans) for (let i = 0; i < ch.length; i++) ch[i] = Math.max(-1, Math.min(1, ch[i] * k));
+    let first = 0;
+    while (first < x.length && Math.abs(x[first]) < 0.25) first++;
+    buf.lead = Math.max(0, first / buf.sampleRate - 0.02);
+    return buf;
+  }
+
+  // gravel under the tyres and crash hits, recorded with ElevenLabs. Sliding uses the same gravel
+  // loop, faster and brighter (a generated slide loop had gaps in it).
+  async loadSurface() {
+    try {
+      const roll = await this.loadBuffer('gravel_roll');
+      const loop = (buf, highpass) => {
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf; src.loop = true;
+        const g = this.ctx.createGain(); g.gain.value = 0;
+        let node = src;
+        if (highpass) {
+          const f = this.ctx.createBiquadFilter();
+          f.type = 'highpass'; f.frequency.value = highpass;
+          node = src.connect(f);
+        }
+        node.connect(g).connect(this.master);
+        src.start(0, Math.random() * buf.duration);
+        return { src, gain: g };
+      };
+      this.roll = loop(roll);
+      this.slide = loop(roll, 900);
+      this.gravelGain.gain.value = 0; // the noise version is no longer needed
+    } catch { this.roll = null; }
+    try {
+      this.crashBufs = await Promise.all([this.loadBuffer('crash_light', 'hit'), this.loadBuffer('crash_heavy', 'hit')]);
+    } catch { this.crashBufs = null; }
   }
 
   async loadEngine() {
@@ -110,6 +158,17 @@ export class CarAudio {
   crash(sev) {
     if (!this.ctx) return;
     const ctx = this.ctx, t = ctx.currentTime;
+    if (this.crashBufs) {
+      const src = ctx.createBufferSource();
+      const buf = this.crashBufs[sev > 0.45 ? 1 : 0];
+      src.buffer = buf;
+      src.playbackRate.value = 0.9 + Math.random() * 0.2; // a little variety
+      const g = ctx.createGain();
+      g.gain.value = Math.min(1.2, 0.35 + sev * 0.9);
+      src.connect(g).connect(this.master);
+      src.start(t, buf.lead);
+      return;
+    }
     const src = ctx.createBufferSource();
     src.buffer = this.noise.buffer;
     const f = ctx.createBiquadFilter();
@@ -140,6 +199,14 @@ export class CarAudio {
     this.engineFilter.frequency.setTargetAtTime(400 + rpm * 0.25 + throttle * 1400, t, 0.05);
     if (!this.layers) this.engineGain.gain.setTargetAtTime(0.13 + throttle * 0.14, t, 0.05);
     const abs = Math.abs(speed);
+    if (this.roll) {
+      // rolling: louder and faster with speed (quieter off gravel); sliding: with tyre slip
+      this.roll.gain.gain.setTargetAtTime(Math.min(1, abs / 25) * (onGravel ? 0.75 : 0.25), t, 0.08);
+      this.roll.src.playbackRate.setTargetAtTime(0.75 + Math.min(0.6, abs / 50), t, 0.1);
+      this.slide.gain.gain.setTargetAtTime(Math.min(1, slip * 1.4) * Math.min(1, abs / 5) * (onGravel ? 0.9 : 0.4), t, 0.06);
+      this.slide.src.playbackRate.setTargetAtTime(1.25 + Math.min(0.35, abs / 80), t, 0.1);
+      return;
+    }
     const g = Math.min(0.5, abs / 60) * (onGravel ? 1 : 0.5) + slip * 0.35 * Math.min(1, abs / 5);
     this.gravelGain.gain.setTargetAtTime(g, t, 0.08);
     this.gravelFilter.frequency.setTargetAtTime(500 + abs * 18, t, 0.1);

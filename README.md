@@ -133,6 +133,13 @@ Die Ansagen kommen aus einer echten Sprachaufnahme: ElevenLabs Text-to-Speech (S
 
 Der Motor besteht aus drei Geräusch-Loops von ElevenLabs Sound Effects (`public/sounds/engine_idle|mid|high.mp3`, je 4 s, nahtlos geloopt): Leerlauf-Blubbern, Knurren unter Last, Kreischen bei hoher Drehzahl. `src/audio.js` blendet je nach Drehzahl zwischen ihnen über und passt die Tonhöhe an die Drehzahl an. Jeder Loop hat eine aus seiner gemessenen Grundfrequenz bestimmte Referenzdrehzahl, damit beim Überblenden die Tonhöhe gleich bleibt. Ohne Gas klingt der Motor gedämpft. Fehlen die Dateien, läuft der alte Synthesizer-Motor.
 
+Auch Schotter und Unfälle kommen von ElevenLabs Sound Effects:
+- `gravel_roll.mp3`: Reifen auf Schotter als nahtloser Loop. Er wird mit der Geschwindigkeit lauter und schneller und ist abseits von Schotter leiser.
+- Beim Rutschen und Durchdrehen spielt derselbe Loop schneller und heller gefiltert, je nach Radschlupf. Ein eigens erzeugter Rutsch-Loop hatte Lücken.
+- `crash_light.mp3` und `crash_heavy.mp3`: Je nach Wucht des Aufpralls spielt der leichte oder der schwere Treffer, mit leicht zufälliger Tonhöhe.
+
+Alle Geräusche werden beim Laden auf eine einheitliche Lautstärke gebracht. Stille am Anfang eines Treffers wird übersprungen.
+
 ## Texturen
 
 Straßen- und Bodentexturen sind Fotos von [Poly Haven](https://polyhaven.com) (CC0): `rocky_trail` (Schotter), `asphalt_track`, `snow_02`, `dense_sand`, `aerial_grass_rock`. Sie liegen verkleinert in `public/textures/` (zusammen ca. 1,2 MB). Das Spiel färbt sie auf die Farben des jeweiligen Untergrunds um und legt auf der Straße Fahrspuren, Linien und weiche Ränder darüber. Welche Textur zu welchem Untergrund gehört, steht in `src/environments.js` (`textures`). Fehlen die Dateien, fällt das Spiel auf die einfache, selbst gezeichnete Optik zurück.
