@@ -210,3 +210,13 @@ body.codriver #speedo { transform: scale(0.8); transform-origin: bottom right; }
 .figures { margin: 4px 0 8px; }
 .pi-gain { color: #6dff8a; font-size: 12px; margin-left: 4px; }
 .pi-gain.zero { color: #999; }
+
+/* purchase confirmation */
+.confirm { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(5, 8, 12, 0.6); animation: confirm-in 0.12s ease-out; }
+.confirm-box { width: min(380px, 90vw); background: #18202b; border: 2px solid #ffd400; border-radius: 14px; padding: 18px 20px; text-align: center; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); }
+.confirm-box h3 { margin: 0 0 6px; font-size: 20px; }
+.confirm-box p { margin: 4px 0; }
+.confirm-price { font-size: 28px; font-weight: 800; color: #ffd400; margin: 10px 0 2px; }
+.confirm-btns { display: flex; gap: 10px; justify-content: center; margin-top: 14px; }
+.confirm-btns .btn { min-width: 120px; }
+@keyframes confirm-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }

@@ -14,10 +14,11 @@ import { buildPacenotes } from './pacenotes.js';
 import { PacenoteUI } from './pacenoteUI.js';
 import { hostRoom, joinRoom, normalizeCode, NAT_MESSAGE } from './net.js';
 import { getEnvironment } from './environments.js';
-import { getCar, weeklyCar } from './cars.js';
+import { getCar, weeklyCar, CARS } from './cars.js';
 import {
   loadProfile, ownsCar, START_CAR, tunedOverrides, liveryColors, selectedLivery, addMoney, formatMoney,
   RALLY_PRIZES, CHAMPION_PRIZES, buyCar, buyUpgrade, buyLivery, selectLivery,
+  CAR_PRICES, UPGRADES, LIVERIES, upgradeLevel, ownsLivery,
 } from './profile.js';
 import { leaderboardReady, isoWeek, weeklyStage, fetchWeekly, submitWeekly, NAME_KEY } from './leaderboard.js';
 import {
@@ -280,7 +281,8 @@ async function main() {
   // ---------- controller navigation in menus ----------
   let padFocus = null;
   function focusables() {
-    return [...$('overlay').querySelectorAll('button, input[type=checkbox], summary')]
+    const root = $('overlay').querySelector('.confirm') || $('overlay');
+    return [...root.querySelectorAll('button, input[type=checkbox], summary')]
       .filter((el) => !el.disabled && el.offsetParent !== null);
   }
   function defaultFocus() {
@@ -327,11 +329,41 @@ async function main() {
     }
     if (actions.has('NavOK')) padFocus.click();
     if (actions.has('NavStart')) (enterAction || (() => padFocus.click()))();
+    if (actions.has('NavBack') && confirmBox) { confirmBox.close(); return; }
     if (actions.has('NavBack')) {
       const back = $('c-menu') || $('j-menu') || $('f-menu');
       if (back) back.click();
     }
   }
+  // ---------- purchase confirmation ----------
+  let confirmBox = null;
+  function confirmBuy({ title, text, price, onYes }) {
+    if (confirmBox) confirmBox.close();
+    if (document.activeElement) document.activeElement.blur(); // Enter must not click the button behind the dialog
+    const prevEnter = enterAction;
+    const el = document.createElement('div');
+    el.className = 'confirm';
+    el.innerHTML = `<div class="confirm-box" role="dialog" aria-modal="true">
+      <h3>${title}</h3><p>${text}</p>
+      <div class="confirm-price">${formatMoney(price)}</div>
+      <p class="small">Kontostand danach: ${formatMoney(PROFILE.money - price)}</p>
+      <div class="confirm-btns"><button class="btn" data-c="no">Abbrechen</button><button class="btn primary" data-c="yes">Kaufen</button></div></div>`;
+    const yes = el.querySelector('[data-c=yes]');
+    const close = () => {
+      el.remove();
+      confirmBox = null;
+      setTimeout(() => { if (!confirmBox) enterAction = prevEnter; }, 0); // not in the same frame as the Enter that confirmed
+      if (padFocus) setPadFocus(null);
+    };
+    el.querySelector('[data-c=no]').onclick = close;
+    yes.onclick = () => { close(); onYes(); };
+    el.onclick = (e) => { if (e.target === el) close(); };
+    $('overlay').appendChild(el);
+    confirmBox = { close };
+    enterAction = () => yes.click();
+    if (padFocus) setPadFocus(yes);
+  }
+
   function hideOverlay() { $('overlay').classList.add('hidden'); }
   let enterAction = null; // what Enter does on the current screen
 
@@ -515,15 +547,31 @@ async function main() {
       scr.querySelector('.wallet').textContent = `💰 ${formatMoney(PROFILE.money)}`;
       $('garage').querySelectorAll('[data-g-car]').forEach((b) => { b.onclick = () => { garageCar = b.dataset.gCar; sessionStorage.setItem('rally.garageCar', garageCar); renderGarage(); }; });
       $('garage').querySelectorAll('[data-g-buycar]').forEach((b) => {
-        b.onclick = () => { if (buyCar(PROFILE, b.dataset.gBuycar)) { garageCar = b.dataset.gBuycar; bought('Gekauft! Das Auto steht jetzt in Meisterschaft und freier Fahrt zur Wahl.'); } };
+        const id = b.dataset.gBuycar;
+        b.onclick = () => confirmBuy({
+          title: `${CARS[id].name} kaufen?`, text: `${CARS[id].drive} · ${CARS[id].tagline}`, price: CAR_PRICES[id],
+          onYes: () => { if (buyCar(PROFILE, id)) { garageCar = id; bought('Gekauft! Das Auto steht jetzt in Meisterschaft und freier Fahrt zur Wahl.'); } },
+        });
       });
       $('garage').querySelectorAll('[data-g-up]').forEach((b) => {
-        b.onclick = () => { if (buyUpgrade(PROFILE, garageCar, b.dataset.gUp)) bought('Eingebaut – gilt ab der nächsten Etappe.'); };
+        const part = b.dataset.gUp;
+        const u = UPGRADES[part], level = upgradeLevel(PROFILE, garageCar, part);
+        const gain = b.querySelector('.pi-gain');
+        b.onclick = () => confirmBuy({
+          title: `${u.name} Stufe ${level + 1} einbauen?`,
+          text: `${u.text} für den ${CARS[garageCar].name}${gain ? ` (${gain.textContent})` : ''}.`, price: u.prices[level],
+          onYes: () => { if (buyUpgrade(PROFILE, garageCar, part)) bought('Eingebaut – gilt ab der nächsten Etappe.'); },
+        });
       });
       $('garage').querySelectorAll('[data-g-liv]').forEach((b) => {
         b.onclick = () => {
           const id = b.dataset.gLiv;
-          if (selectLivery(PROFILE, garageCar, id) || buyLivery(PROFILE, garageCar, id)) bought('Lackierung gewählt – zu sehen ab der nächsten Etappe.');
+          if (ownsLivery(PROFILE, garageCar, id)) { if (selectLivery(PROFILE, garageCar, id)) bought('Lackierung gewählt – zu sehen ab der nächsten Etappe.'); return; }
+          const l = LIVERIES.find((x) => x.id === id);
+          confirmBuy({
+            title: `Lackierung „${l.name}" kaufen?`, text: `Für den ${CARS[garageCar].name}. Sie wird sofort ausgewählt.`, price: l.price,
+            onYes: () => { if (buyLivery(PROFILE, garageCar, id)) bought('Lackierung gekauft – zu sehen ab der nächsten Etappe.'); },
+          });
         };
       });
     };
@@ -975,7 +1023,8 @@ async function main() {
     else if (inp.actions.has('Enter') && (MODE === 'free' || MODE === 'weekly') && !isCo && game.state !== 'intro') restart();
     if (inp.actions.has('KeyN') && MODE === 'free' && !isCo && !overlayOpen) { go(freeQuery(Math.floor(Math.random() * 99999) + 1, ENV.id, CAR.id, true)); return; }
     // in fullscreen the browser wants Esc held to leave it, so Esc does not open the menu there
-    if (inp.actions.has('Escape') && !document.fullscreenElement && !isCo && game.state !== 'intro') {
+    if (inp.actions.has('Escape') && confirmBox) confirmBox.close();
+    else if (inp.actions.has('Escape') && !document.fullscreenElement && !isCo && game.state !== 'intro') {
       if (MODE === 'champ' && (game.state === 'running' || game.state === 'countdown')) {
         if (confirm('Prüfung aufgeben? Wie bei einer echten Rallye bekommst du die Bestzeit dieser Prüfung plus 10 Minuten – die Rallye geht weiter.')) retire();
       } else go('');
