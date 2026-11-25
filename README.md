@@ -32,6 +32,19 @@ Einstellbar in `src/championship.js` (`CUT_*`, `JUMP_START_PENALTIES`, `RETIRE_P
 
 **Gegnerzeiten** werden aus einer Referenzzeit pro Prüfung berechnet (Kurvenradien, Beschleunigung, Bremsen, Grip des Untergrunds) mal Können des Gegners plus etwas Zufall und gelegentlichen Fehlern.
 
+## Preisgeld und Garage
+
+In der Meisterschaft gibt es Preisgeld (Spielwährung, gespeichert im Browser):
+- nach jeder Rallye für die Platzierung: 25.000 / 18.000 / 15.000 / 12.000 / 10.000 / 8.000 / 6.000 / 4.000 €
+- am Ende der Meisterschaft eine Prämie für den Endstand: 100.000 / 60.000 / 40.000 / 25.000 / 15.000 / 10.000 / 5.000 / 2.000 €
+
+Man startet mit dem **Fuchs R2** und 15.000 €. Im Menü-Reiter **Garage** kauft man:
+- **Autos:** Bison Klassik 40.000 €, Falke R4 70.000 €
+- **Tuning** pro Auto in 3 Stufen: Motor (+6 % Leistung je Stufe), Bremsen (+10 %), Fahrwerk (stabiler, −15 % Schaden je Stufe), Reifen (+3 % Grip)
+- **Lackierungen** pro Auto: Werkslackierung gratis, dazu Mitternacht, Gletscher, Feuer und Schwarz-Gold
+
+Tuning gilt in Meisterschaft und freier Fahrt. Bei der **Strecke der Woche** fahren alle mit Serienautos (alle Autos verfügbar, kein Tuning), damit die Online-Rangliste fair bleibt. Im Koop sieht der Beifahrer die Lackierung des Fahrers. Preise und Wirkungen stehen in `src/profile.js`.
+
 ## Online-Rangliste: Strecke der Woche
 
 Jede Kalenderwoche (ISO-Woche, UTC) gibt es eine feste Strecke für alle – Untergrund und Strecke ergeben sich aus der Woche. Im Menü unter **Woche** sieht man die Rangliste und startet die Fahrt; man darf beliebig oft fahren, es zählt die beste Zeit pro Name (inkl. Strafen). Nach dem Ziel Namen eingeben und „Zeit eintragen“.

@@ -47,6 +47,7 @@ export const TUNING = {
   pitchDamping: 1.2,
   yawHold: 1.4,
   yawHoldHandbrake: 0.25,
+  damageResist: 1, // factor on damage taken (suspension tuning lowers it)
 };
 
 
@@ -187,7 +188,7 @@ export class Vehicle {
     this.impactStep = this.stepCount;
     const v = this.body.linvel(), p = this.velBefore || v;
     const dv = Math.hypot(v.x - p.x, v.y - p.y, v.z - p.z);
-    const sev = (dv - 3) / 22;
+    const sev = ((dv - 3) / 22) * this.T.damageResist;
     if (sev <= 0) return 0;
     const q = this.body.rotation();
     const f = rotate(q, { x: 1, y: 0, z: 0 }), r = rotate(q, { x: 0, y: 0, z: 1 }), u = rotate(q, { x: 0, y: 1, z: 0 });

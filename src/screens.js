@@ -3,6 +3,9 @@ import { CARS, carStats } from './cars.js';
 import { ENVIRONMENTS, getEnvironment } from './environments.js';
 import { TUNING } from './vehicle.js';
 import {
+  CAR_PRICES, UPGRADES, LIVERIES, formatMoney, ownsCar, upgradeLevel, ownsLivery, selectedLivery, liveryColors,
+} from './profile.js';
+import {
   RALLIES, STAGES_PER_RALLY, SERVICE_MINUTES, PLAYER,
   stageResults, rallyStandings, championshipStandings, repairCost,
 } from './championship.js';
@@ -15,17 +18,58 @@ export function formatTime(t) {
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export function carCards(selected) {
+const hex = (v) => `#${v.toString(16).padStart(6, '0')}`;
+
+// profile given: cars you do not own are locked (bought in the garage)
+export function carCards(selected, profile = null) {
   return `<div class="cards">${Object.values(CARS).map((c) => {
     const s = carStats(c, TUNING);
-    const col = `#${c.livery.color.toString(16).padStart(6, '0')}`;
-    const st = `#${c.livery.stripe.toString(16).padStart(6, '0')}`;
-    return `<button class="card${c.id === selected ? ' selected' : ''}" data-car="${c.id}">
-      <div class="card-swatch" style="background:linear-gradient(90deg, ${col} 70%, ${st} 70%)"></div>
-      <div class="card-title">${esc(c.name)}</div>
+    const liv = liveryColors(c.id, profile ? selectedLivery(profile, c.id) : 'werk');
+    const locked = profile && !ownsCar(profile, c.id);
+    return `<button class="card${c.id === selected && !locked ? ' selected' : ''}${locked ? ' locked' : ''}" data-car="${c.id}"${locked ? ' disabled' : ''}>
+      <div class="card-swatch" style="background:linear-gradient(90deg, ${hex(liv.color)} 70%, ${hex(liv.stripe)} 70%)"></div>
+      <div class="card-title">${locked ? '🔒 ' : ''}${esc(c.name)}</div>
       <div class="card-sub">${esc(c.drive)} · ${s.power} kW · ${s.mass} kg</div>
-      <div class="card-text">${esc(c.tagline)}</div></button>`;
+      <div class="card-text">${locked ? `In der Garage für ${formatMoney(CAR_PRICES[c.id])} freischalten.` : esc(c.tagline)}</div></button>`;
   }).join('')}</div>`;
+}
+
+// ---------- garage ----------
+export function garageHtml(p, carId) {
+  const car = CARS[carId];
+  const carRows = Object.values(CARS).map((c) => {
+    const own = ownsCar(p, c.id);
+    const price = CAR_PRICES[c.id];
+    const liv = liveryColors(c.id, own ? selectedLivery(p, c.id) : 'werk');
+    return `<div class="g-car${c.id === carId ? ' active' : ''}">
+      <div class="card-swatch" style="background:linear-gradient(90deg, ${hex(liv.color)} 70%, ${hex(liv.stripe)} 70%)"></div>
+      <b>${esc(c.name)}</b><span class="small">${esc(c.drive)}</span>
+      ${own ? `<button class="btn" data-g-car="${c.id}">${c.id === carId ? 'In Bearbeitung' : 'Bearbeiten'}</button>`
+        : `<button class="btn primary" data-g-buycar="${c.id}"${p.money < price ? ' disabled' : ''}>Kaufen · ${formatMoney(price)}</button>`}
+    </div>`;
+  }).join('');
+  const tuning = Object.entries(UPGRADES).map(([part, u]) => {
+    const level = upgradeLevel(p, carId, part);
+    const price = u.prices[level];
+    const pips = [0, 1, 2].map((i) => `<i class="${i < level ? 'on' : ''}"></i>`).join('');
+    const btn = price === undefined ? '<span class="small">Maximal</span>'
+      : `<button class="btn" data-g-up="${part}"${p.money < price ? ' disabled' : ''}>Stufe ${level + 1} · ${formatMoney(price)}</button>`;
+    return `<div class="g-row"><div><b>${u.name}</b><div class="small">${u.text}</div></div><div class="pips">${pips}</div>${btn}</div>`;
+  }).join('');
+  const sel = selectedLivery(p, carId);
+  const liveries = LIVERIES.map((l) => {
+    const c = liveryColors(carId, l.id);
+    const own = ownsLivery(p, carId, l.id);
+    const label = l.id === sel ? 'gewählt' : own ? 'wählen' : formatMoney(l.price);
+    return `<button class="g-liv${l.id === sel ? ' selected' : ''}" data-g-liv="${l.id}"${!own && p.money < l.price ? ' disabled' : ''}>
+      <span class="g-sw" style="background:linear-gradient(135deg, ${hex(c.color)} 55%, ${hex(c.stripe)} 55%, ${hex(c.stripe)} 75%, ${hex(c.accent)} 75%)"></span>
+      <b>${esc(l.name)}</b><span class="small">${label}</span></button>`;
+  }).join('');
+  return `<div class="wallet big">💰 ${formatMoney(p.money)} <span class="small">· insgesamt verdient ${formatMoney(p.earned || 0)}</span></div>
+    <p class="small">Preisgeld gibt es in der Meisterschaft: nach jeder Rallye für die Platzierung, am Ende eine Prämie für den Endstand. Tuning gilt in Meisterschaft und freier Fahrt, nicht bei der Strecke der Woche.</p>
+    <div class="label">Autos</div><div class="g-cars">${carRows}</div>
+    <div class="label">Tuning · ${esc(car.name)}</div>${tuning}
+    <div class="label">Lackierung · ${esc(car.name)}</div><div class="g-livs">${liveries}</div>`;
 }
 
 export function envButtons(selected) {
@@ -42,15 +86,17 @@ export function barColor(v) {
 }
 
 // Main menu
-export function menuScreen({ champ, car, env, seed, hostCode, weekly }) {
+export function menuScreen({ champ, car, env, seed, hostCode, weekly, profile }) {
   const cont = champ && !champ.finished
     ? `<button class="btn primary" id="m-champ-continue">Fortsetzen · ${RALLIES[champ.rally].icon} ${esc(RALLIES[champ.rally].name)}, WP ${champ.stage + 1}/${STAGES_PER_RALLY}</button>`
     : '';
   return `
+  <div class="wallet">💰 ${formatMoney(profile.money)}</div>
   <div class="tabs">
     <button class="tab active" data-tab="champ">Meisterschaft</button>
     <button class="tab" data-tab="free">Freie Fahrt</button>
     <button class="tab" data-tab="weekly">Woche</button>
+    <button class="tab" data-tab="garage">Garage</button>
     <button class="tab" data-tab="coop">Koop</button>
   </div>
   <section data-pane="champ">
@@ -58,12 +104,12 @@ export function menuScreen({ champ, car, env, seed, hostCode, weekly }) {
     <div class="rally-list">${RALLIES.map((r) => `<span>${r.icon} ${esc(r.name)}</span>`).join('')}</div>
     ${cont}
     <div class="label">Auto für eine neue Meisterschaft</div>
-    ${carCards(car)}
+    ${carCards(car, profile)}
     <button class="btn${cont ? '' : ' primary'}" id="m-champ-new">Neue Meisterschaft starten</button>
   </section>
   <section data-pane="free" class="hidden">
     <div class="label">Auto</div>
-    ${carCards(car)}
+    ${carCards(car, profile)}
     <div class="label">Untergrund</div>
     ${envButtons(env)}
     <div class="free-row">
@@ -75,6 +121,7 @@ export function menuScreen({ champ, car, env, seed, hostCode, weekly }) {
   <section data-pane="weekly" class="hidden">
     ${weeklyPane(weekly, car)}
   </section>
+  <section data-pane="garage" class="hidden"><div id="garage"></div></section>
   <section data-pane="coop" class="hidden">
     <p class="sub">Einer fährt, der andere sagt auf einem zweiten Gerät den Aufschrieb an.</p>
     <div class="menu-coop">
@@ -125,7 +172,7 @@ function pointsTable(rows) {
 }
 
 // After a championship stage
-export function champResultScreen(champ, rally, stage, rallyDone, penalty, note = '') {
+export function champResultScreen(champ, rally, stage, rallyDone, penalty, note = '', prize = '') {
   const sr = stageResults(champ, rally, stage);
   const pos = sr.findIndex((r) => r.player) + 1;
   const r = RALLIES[rally];
@@ -133,6 +180,7 @@ export function champResultScreen(champ, rally, stage, rallyDone, penalty, note 
     <p class="sub">${note ? `${esc(note)} · ` : ''}Platz ${pos} von ${sr.length}${penalty ? ` · inkl. ${penalty.toFixed(1).replace('.', ',')} s Strafe` : ''}</p>
     <div class="two-col"><div>${standingsTable(sr, 'Wertungsprüfung', true)}</div>
     <div>${standingsTable(rallyStandings(champ, rally), rallyDone ? 'Endstand Rallye' : 'Gesamt Rallye', true)}</div></div>`;
+  if (prize) html += `<div class="prize">💰 ${prize}</div>`;
   if (rallyDone) html += pointsTable(championshipStandings(champ));
   const next = champ.finished ? 'Endergebnis' : rallyDone ? 'Zum Service' : 'Nächste Prüfung';
   html += `<button class="btn primary" id="r-next">${next} <span class="small">(Enter)</span></button>`;
@@ -157,7 +205,8 @@ export function finalScreen(champ) {
   const rows = championshipStandings(champ);
   const pos = rows.findIndex((r) => r.player) + 1;
   const title = pos === 1 ? '🏆 Meister!' : `Meisterschaft beendet – Platz ${pos}`;
-  return `<div class="champ-head">${title}</div>${pointsTable(rows)}
+  const bonus = champ.finalPrize ? `<div class="prize">💰 Prämie für Platz ${pos}: +${formatMoney(champ.finalPrize)} · eingelöst in der Garage</div>` : '';
+  return `<div class="champ-head">${title}</div>${bonus}${pointsTable(rows)}
     <button class="btn primary" id="f-new">Neue Meisterschaft</button>`;
 }
 
@@ -169,7 +218,7 @@ const dateDe = (d) => d.toLocaleDateString('de-AT', { day: 'numeric', month: 'nu
 function weeklyPane(weekly, car) {
   const env = getEnvironment(weekly.env);
   const until = new Date(weekly.week.end.getTime() - 86400000);
-  return `<p class="sub">Eine Strecke für alle, jede Woche neu. Du kannst so oft fahren, wie du willst – in der Rangliste zählt deine beste Zeit (inkl. Strafen).</p>
+  return `<p class="sub">Eine Strecke für alle, jede Woche neu. Du kannst so oft fahren, wie du willst – in der Rangliste zählt deine beste Zeit (inkl. Strafen). Hier fahren alle mit Serienautos: jedes Auto ist verfügbar, Tuning zählt nicht.</p>
     <div class="weekly-head"><b>${esc(weekly.week.id.replace('-W', ' · KW '))}</b> · ${dateDe(weekly.week.start)}–${dateDe(until)} · ${esc(env.name)} (${esc(env.surfaceName)}) · Strecke #${weekly.seed}</div>
     <div class="label">Auto</div>
     ${carCards(car)}

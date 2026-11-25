@@ -15,14 +15,18 @@ import { PacenoteUI } from './pacenoteUI.js';
 import { hostRoom, joinRoom, normalizeCode, NAT_MESSAGE } from './net.js';
 import { getEnvironment } from './environments.js';
 import { getCar } from './cars.js';
+import {
+  loadProfile, ownsCar, START_CAR, tunedOverrides, liveryColors, selectedLivery, addMoney, formatMoney,
+  RALLY_PRIZES, CHAMPION_PRIZES, buyCar, buyUpgrade, buyLivery, selectLivery,
+} from './profile.js';
 import { leaderboardReady, isoWeek, weeklyStage, fetchWeekly, submitWeekly, NAME_KEY } from './leaderboard.js';
 import {
   RALLIES, RESET_PENALTY, OFF_TRACK_MARGIN, CUT_MIN_GAIN, CUT_PENALTIES, CUT_REF_SPEED, JUMP_START_PENALTIES,
   RETIRE_PENALTY, OFF_RESET_TIME, OFF_RESET_PENALTY, bestRivalTime, SERVICE_MINUTES, loadChampionship, saveChampionship, newChampionship,
-  stageSeed, referenceTime, recordStage, repairCost,
+  stageSeed, referenceTime, recordStage, repairCost, rallyStandings, championshipStandings,
 } from './championship.js';
 import {
-  formatTime, menuScreen, champIntroScreen, champResultScreen, serviceScreen, finalScreen, barColor,
+  formatTime, menuScreen, champIntroScreen, champResultScreen, serviceScreen, finalScreen, barColor, garageHtml,
   weeklyTable, weeklyResultScreen,
 } from './screens.js';
 
@@ -53,6 +57,11 @@ if (weeklyActive) {
   ENV = getEnvironment(params.get('env') || 'forest');
   CAR = getCar(params.get('car') || localStorage.getItem('rally.car') || 'falke');
 }
+// garage: outside the stage of the week only cars you own can be driven (a running championship keeps its car)
+const PROFILE = loadProfile();
+if (!weeklyActive && !JOIN && !champActive && !ownsCar(PROFILE, CAR.id)) CAR = getCar(PROFILE.cars.includes(START_CAR) ? START_CAR : PROFILE.cars[0]);
+const STOCK = weeklyActive || !!JOIN; // stage of the week: stock cars for a fair leaderboard; co-driver: no physics anyway
+const LIVERY_ID = JOIN ? (params.get('liv') || 'werk') : selectedLivery(PROFILE, CAR.id);
 const MODE = JOIN ? 'codriver' : weeklyActive ? 'weekly' : champActive ? 'champ' : params.has('champ') && CHAMP && CHAMP.finished ? 'final' : 'free';
 
 function go(query) { location.search = query; }
@@ -117,8 +126,8 @@ async function main() {
   buildTrees(stage, terrain, world, scene, ENV, models);
   buildGates(stage, scene, world, models);
 
-  const vehicle = new Vehicle(world, CAR.tuning);
-  const car = buildCarModel(models, CAR.livery, makeEnvMap(renderer, ENV));
+  const vehicle = new Vehicle(world, STOCK ? CAR.tuning : tunedOverrides(PROFILE, CAR.id, TUNING));
+  const car = buildCarModel(models, liveryColors(CAR.id, LIVERY_ID), makeEnvMap(renderer, ENV));
   scene.add(car.root);
   if (champActive) vehicle.setDamage(CHAMP.damage);
   car.setDamage(vehicle.damage);
@@ -198,6 +207,23 @@ async function main() {
     if (link) link.send({ t: 'restart' });
   }
 
+  // Prize money: after each rally for the placing, after the last rally a bonus for the final standing.
+  function awardPrizes(rally, rallyDone) {
+    if (!rallyDone) return '';
+    const pos = rallyStandings(CHAMP, rally).findIndex((r) => r.player);
+    const prize = RALLY_PRIZES[pos] || 0;
+    addMoney(PROFILE, prize);
+    let text = `Preisgeld Rallye (Platz ${pos + 1}): +${formatMoney(prize)}`;
+    if (CHAMP.finished) {
+      const fpos = championshipStandings(CHAMP).findIndex((r) => r.player);
+      CHAMP.finalPrize = CHAMPION_PRIZES[fpos] || 0;
+      saveChampionship(CHAMP);
+      addMoney(PROFILE, CHAMP.finalPrize);
+      text += ` · Meisterschafts-Prämie (Platz ${fpos + 1}): +${formatMoney(CHAMP.finalPrize)}`;
+    }
+    return `${text} · Kontostand ${formatMoney(PROFILE.money)}`;
+  }
+
   // Retiring from a championship stage: like Art. 54 the stage counts with its best time + 10 minutes.
   function retire() {
     game.state = 'finished';
@@ -206,7 +232,7 @@ async function main() {
     const ref = referenceTime(stage, ENV);
     const t = bestRivalTime(CHAMP, ref) + RETIRE_PENALTY;
     const { rallyDone } = recordStage(CHAMP, t, ref, vehicle.damage);
-    const res = champResultScreen(CHAMP, rally, stg, rallyDone, 0, 'Aufgegeben – Bestzeit + 10 Minuten');
+    const res = champResultScreen(CHAMP, rally, stg, rallyDone, 0, 'Aufgegeben – Bestzeit + 10 Minuten', awardPrizes(rally, rallyDone));
     if (link) link.send({ t: 'finish', time: t, line: 'Aufgegeben – Bestzeit + 10 Minuten' });
     setTimeout(() => showChampResult(res.html, rallyDone), 1200);
   }
@@ -218,7 +244,7 @@ async function main() {
       const rally = CHAMP.rally, stg = CHAMP.stage;
       const ref = referenceTime(stage, ENV);
       const { rallyDone } = recordStage(CHAMP, t, ref, vehicle.damage);
-      const res = champResultScreen(CHAMP, rally, stg, rallyDone, game.penalty);
+      const res = champResultScreen(CHAMP, rally, stg, rallyDone, game.penalty, '', awardPrizes(rally, rallyDone));
       if (link) link.send({ t: 'finish', time: t, line: `Platz ${res.pos} auf dieser Prüfung` });
       setTimeout(() => showChampResult(res.html, rallyDone), 1800);
       return;
@@ -423,10 +449,11 @@ async function main() {
     input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') send(); });
   }
 
+  let garageMessage = '';
   function showMenu() {
     let pickCar = CAR.id, pickEnv = ENV.id, pickSeed = SEED;
     const saved = loadChampionship();
-    showOverlay(menuScreen({ champ: saved, car: pickCar, env: pickEnv, seed: pickSeed, hostCode: game.role === 'driver' ? game.roomCode : null, weekly: { ...WEEKLY, week: WEEK } }));
+    showOverlay(menuScreen({ champ: saved, car: pickCar, env: pickEnv, seed: pickSeed, hostCode: game.role === 'driver' ? game.roomCode : null, weekly: { ...WEEKLY, week: WEEK }, profile: PROFILE }));
     loadWeeklyList(localStorage.getItem(NAME_KEY));
     $('help').classList.remove('hidden');
     const scr = $('screen');
@@ -440,6 +467,35 @@ async function main() {
     const lastTab = sessionStorage.getItem('rally.tab');
     if (lastTab) { const t = scr.querySelector(`.tab[data-tab="${lastTab}"]`); if (t) t.onclick(); }
     wireCards(scr, (id) => { pickCar = id; localStorage.setItem('rally.car', id); scr.querySelectorAll('[data-car]').forEach((x) => x.classList.toggle('selected', x.dataset.car === id)); });
+    // garage: buy cars, tuning and liveries; changes apply when the next stage is loaded
+    const lastGarageCar = sessionStorage.getItem('rally.garageCar');
+    let garageCar = lastGarageCar && ownsCar(PROFILE, lastGarageCar) ? lastGarageCar : ownsCar(PROFILE, pickCar) ? pickCar : PROFILE.cars[0];
+    // after a purchase the whole menu is rebuilt so the car cards in the other tabs are up to date
+    const bought = (msg) => {
+      sessionStorage.setItem('rally.tab', 'garage');
+      sessionStorage.setItem('rally.garageCar', garageCar);
+      garageMessage = msg;
+      showMenu();
+    };
+    const renderGarage = (msg) => {
+      $('garage').innerHTML = garageHtml(PROFILE, garageCar) + (msg ? `<p class="small g-msg">${msg}</p>` : '');
+      scr.querySelector('.wallet').textContent = `💰 ${formatMoney(PROFILE.money)}`;
+      $('garage').querySelectorAll('[data-g-car]').forEach((b) => { b.onclick = () => { garageCar = b.dataset.gCar; sessionStorage.setItem('rally.garageCar', garageCar); renderGarage(); }; });
+      $('garage').querySelectorAll('[data-g-buycar]').forEach((b) => {
+        b.onclick = () => { if (buyCar(PROFILE, b.dataset.gBuycar)) { garageCar = b.dataset.gBuycar; bought('Gekauft! Das Auto steht jetzt in Meisterschaft und freier Fahrt zur Wahl.'); } };
+      });
+      $('garage').querySelectorAll('[data-g-up]').forEach((b) => {
+        b.onclick = () => { if (buyUpgrade(PROFILE, garageCar, b.dataset.gUp)) bought('Eingebaut – gilt ab der nächsten Etappe.'); };
+      });
+      $('garage').querySelectorAll('[data-g-liv]').forEach((b) => {
+        b.onclick = () => {
+          const id = b.dataset.gLiv;
+          if (selectLivery(PROFILE, garageCar, id) || buyLivery(PROFILE, garageCar, id)) bought('Lackierung gewählt – zu sehen ab der nächsten Etappe.');
+        };
+      });
+    };
+    renderGarage(garageMessage);
+    garageMessage = '';
     scr.querySelectorAll('[data-env]').forEach((el) => {
       el.onclick = () => {
         pickEnv = el.dataset.env;
@@ -529,7 +585,7 @@ async function main() {
     }
   }
 
-  function hello() { return { t: 'hello', seed: SEED, env: ENV.id, car: CAR.id, damage: vehicle.damage }; }
+  function hello() { return { t: 'hello', seed: SEED, env: ENV.id, car: CAR.id, liv: LIVERY_ID, damage: vehicle.damage }; }
 
   function startHosting(preferredCode) {
     game.role = 'driver';
@@ -569,9 +625,9 @@ async function main() {
         const timer = setTimeout(() => reject(new Error('Der Fahrer antwortet nicht.')), 8000);
         l.on('hello', (m) => { clearTimeout(timer); resolve(m); });
       });
-      if (h.seed !== SEED || h.env !== ENV.id || h.car !== CAR.id) {
+      if (h.seed !== SEED || h.env !== ENV.id || h.car !== CAR.id || (h.liv || 'werk') !== LIVERY_ID) {
         l.close();
-        go(`?seed=${h.seed}&env=${h.env}&car=${h.car}&join=${code}`);
+        go(`?seed=${h.seed}&env=${h.env}&car=${h.car}&liv=${h.liv || 'werk'}&join=${code}`);
         return;
       }
       link = l;
