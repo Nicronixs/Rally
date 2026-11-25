@@ -114,6 +114,15 @@ async function main() {
   const dust = new Dust(scene);
   const audio = new CarAudio();
   const input = new Input();
+  const padStatus = (connected) => {
+    const el = $('pad-status');
+    if (el) el.textContent = connected ? '🎮 Controller verbunden – Steuerkreuz/Stick wählen, A bestätigen, B zurück' : '';
+  };
+  input.onPadChange = (connected) => {
+    padStatus(connected);
+    toast(connected ? '🎮 Controller verbunden' : 'Controller getrennt', 2);
+    if (connected && !$('overlay').classList.contains('hidden') && !padFocus) setPadFocus(defaultFocus());
+  };
   const pacenotes = buildPacenotes(stage);
   const notebook = new PacenoteUI(pacenotes);
   const stageKm = ((stage.finishIndex - stage.startIndex) / 1000).toFixed(2).replace('.', ',');
@@ -195,17 +204,83 @@ async function main() {
     $('screen').innerHTML = html;
     $('screen').classList.remove('hidden');
     $('overlay').classList.remove('hidden');
+    padFocus = null;
+    if (input.pad) setTimeout(() => setPadFocus(defaultFocus()), 0); // a controller needs something selected
+  }
+
+  // ---------- controller navigation in menus ----------
+  let padFocus = null;
+  function focusables() {
+    return [...$('overlay').querySelectorAll('button, input[type=checkbox], summary')]
+      .filter((el) => !el.disabled && el.offsetParent !== null);
+  }
+  function defaultFocus() {
+    const list = focusables();
+    return list.find((el) => el.classList.contains('primary') && el.offsetParent !== null) || list[0] || null;
+  }
+  function setPadFocus(el) {
+    if (padFocus) padFocus.classList.remove('pad-focus');
+    padFocus = el;
+    if (!el) return;
+    el.classList.add('pad-focus');
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ block: 'nearest' });
+  }
+  const NAV_VECTORS = { NavUp: [0, -1], NavDown: [0, 1], NavLeft: [-1, 0], NavRight: [1, 0] };
+  function handleMenuNav(actions) {
+    const list = focusables();
+    if (!list.length) {
+      if (actions.has('NavStart') || actions.has('NavOK')) enterAction && enterAction();
+      return;
+    }
+    if (!padFocus || !list.includes(padFocus)) {
+      if ([...actions].some((a) => a.startsWith('Nav'))) setPadFocus(defaultFocus());
+      if (actions.has('NavStart') && enterAction) enterAction();
+      return;
+    }
+    for (const [name, [vx, vy]] of Object.entries(NAV_VECTORS)) {
+      if (!actions.has(name)) continue;
+      // nearest element in that direction, preferring ones straight ahead
+      const r = padFocus.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      let best = null, bestScore = Infinity;
+      for (const el of list) {
+        if (el === padFocus) continue;
+        const e = el.getBoundingClientRect();
+        const dx = e.left + e.width / 2 - cx, dy = e.top + e.height / 2 - cy;
+        const along = dx * vx + dy * vy;
+        if (along <= 4) continue;
+        const across = Math.abs(dx * vy - dy * vx);
+        const score = along + across * 2.5;
+        if (score < bestScore) { bestScore = score; best = el; }
+      }
+      if (best) setPadFocus(best);
+    }
+    if (actions.has('NavOK')) padFocus.click();
+    if (actions.has('NavStart')) (enterAction || (() => padFocus.click()))();
+    if (actions.has('NavBack')) {
+      const back = $('c-menu') || $('j-menu') || $('f-menu');
+      if (back) back.click();
+    }
   }
   function hideOverlay() { $('overlay').classList.add('hidden'); }
   let enterAction = null; // what Enter does on the current screen
 
   function showResult(t, line) {
     if (game.state !== 'finished') return;
-    const hint = game.role === 'codriver' ? 'Der Fahrer startet die nächste Fahrt'
-      : 'Enter = nochmal fahren · N = neue Strecke · Esc = Menü';
+    const co = game.role === 'codriver';
+    const buttons = co ? '<p class="small">Der Fahrer startet die nächste Fahrt</p>'
+      : `<button class="btn primary" id="f-again">Nochmal fahren <span class="small">(Enter)</span></button>
+         <button class="btn" id="f-new-stage">Neue Strecke <span class="small">(N)</span></button>
+         <button class="btn ghost" id="f-menu">Hauptmenü <span class="small">(Esc)</span></button>`;
     showOverlay(`<p class="sub">Etappe beendet</p><div class="result-time">${formatTime(t)}</div>
-      <div class="result-best">${line}</div><p class="small">${hint}</p>`);
-    enterAction = game.role === 'codriver' ? null : restart;
+      <div class="result-best">${line}</div>${buttons}`);
+    enterAction = co ? null : restart;
+    if (!co) {
+      $('f-again').onclick = restart;
+      $('f-new-stage').onclick = () => go(freeQuery(Math.floor(Math.random() * 99999) + 1, ENV.id, CAR.id, true));
+      $('f-menu').onclick = () => go('');
+    }
   }
 
   function showChampResult(html, rallyDone) {
@@ -649,6 +724,7 @@ async function main() {
   }
 
   let toastTimer = 0;
+  let rumbleTimer = 0;
   function toast(text, secs = 1.6) { $('toast').textContent = text; toastTimer = secs; }
 
   // Fullscreen with keyboard lock: the only way a page may keep Ctrl+W (close tab) for itself.
@@ -665,6 +741,7 @@ async function main() {
     if (sev <= 0) return;
     car.setDamage(vehicle.damage);
     audio.crash(Math.min(1, sev * 2));
+    input.rumble(0.4 + sev * 2, 0.7, 180 + sev * 500);
     shakeTime = Math.min(1.2, 0.4 + sev * 2);
     if (sev > 0.04) toast('Schaden!');
   }
@@ -683,9 +760,11 @@ async function main() {
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
+    const overlayOpen = !$('overlay').classList.contains('hidden');
+    input.menuOpen = overlayOpen;
     const inp = input.read(dt);
     const isCo = game.role === 'codriver';
-    const overlayOpen = !$('overlay').classList.contains('hidden');
+    if (overlayOpen) handleMenuNav(inp.actions);
 
     // one-shot actions
     if (inp.actions.has('KeyM')) audio.toggleMute();
@@ -860,6 +939,15 @@ async function main() {
     }
 
     const onGravel = vehicle.wheelSurface.filter((s) => s === 'gravel').length >= 2 && ENV.id !== 'tarmac';
+    // controller: light road feel, stronger off the road, buzz at the rev limiter
+    rumbleTimer -= dt;
+    if (input.pad && rumbleTimer <= 0 && !overlayOpen && game.state === 'running') {
+      rumbleTimer = 0.12;
+      const offroad = vehicle.wheelSurface.some((s) => s === 'grass');
+      const road = Math.min(1, sp / 30) * (offroad ? 0.35 : onGravel ? 0.12 : 0.04);
+      const weak = road + Math.max(...vehicle.wheelSlip) * 0.15 + (vehicle.limiter ? 0.18 : 0);
+      if (weak > 0.03) input.rumble(offroad ? road * 0.6 : 0, weak, 140);
+    }
     const slip = Math.max(...vehicle.wheelSlip);
     audio.update(vehicle.rpm, isCo ? vehicle.throttle : drive.throttle, vehicle.speed, slip, onGravel);
 

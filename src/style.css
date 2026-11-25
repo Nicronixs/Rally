@@ -151,3 +151,9 @@ body.codriver #speedo { transform: scale(0.8); transform-origin: bottom right; }
 #speedo[data-shift='warn'] #rpm-bar { box-shadow: 0 0 6px #ffd400; }
 #speedo[data-shift='hot'] #rpm-bar, #speedo[data-shift='flash'] #rpm-bar { box-shadow: 0 0 10px #ff3b2f; }
 #speedo[data-shift='flash'] #gear { color: #ff3b2f; }
+
+/* controller focus in menus */
+#overlay .pad-focus { outline: 3px solid #ffd400; outline-offset: 3px; }
+#overlay .card.pad-focus, #overlay .chip.pad-focus { outline-offset: 1px; }
+#pad-status { color: #ffd400; opacity: 0.9; }
+#pad-status:empty { display: none; }

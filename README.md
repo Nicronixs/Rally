@@ -47,7 +47,7 @@ Danach den Workflow neu laufen lassen (Actions → GitHub Pages → Run workflow
 
 ## Steuerung
 
-W/S Gas/Bremse · A/D Lenken · Leertaste Handbremse · Umschalt hochschalten · Strg runterschalten (1 → N → R) · G Automatik/manuell · F Vollbild · R zurück auf die Strecke · C Kamera (Cockpit, Verfolger, Motorhaube) · M Ton · B Aufschrieb · V Ansagen · Enter Neustart · N neue Strecke. Gamepad: RT/LT, linker Stick, A Handbremse, RB/LB schalten, Y Zurücksetzen, View Kamera.
+W/S Gas/Bremse · A/D Lenken · Leertaste Handbremse · Umschalt hochschalten · Strg runterschalten (1 → N → R) · G Automatik/manuell · F Vollbild · R zurück auf die Strecke · C Kamera (Cockpit, Verfolger, Motorhaube) · M Ton · B Aufschrieb · V Ansagen · Enter Neustart · N neue Strecke. **Controller** (Xbox, PlayStation u. a. mit Standard-Belegung): linker Stick lenken · RT Gas · LT Bremse · A Handbremse · RB/LB schalten · Y zurück auf die Strecke · View Kamera · Steuerkreuz ↑ Aufschrieb, ↓ Ansagen, ← Automatik/manuell, → Ton. In allen Menüs: Stick/Steuerkreuz wählen, A bestätigen, B zurück, Start = Weiter. Der Controller vibriert bei Aufprallen, abseits der Straße, auf Schotter und am Drehzahlbegrenzer.
 
 **Schaltung:** Sequenzielles 6-Gang-Getriebe mit Drehzahlmesser und Schaltblitz (gelb ab 6500, rot blinkend am Begrenzer bei 7600 U/min). Standard ist manuell; G schaltet auf Automatik (dann wie früher: Bremse im Stand = rückwärts). Weil Strg+W im Browser den Tab schließt und eine Seite das nicht verhindern darf, am besten im Vollbild fahren (F) – dort sperrt das Spiel die Tastatur für sich.
 
