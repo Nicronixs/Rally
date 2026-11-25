@@ -53,7 +53,7 @@ export function menuScreen({ champ, car, env, seed, hostCode }) {
     <button class="tab" data-tab="coop">Koop</button>
   </div>
   <section data-pane="champ">
-    <p class="sub">${RALLIES.length} Rallyes mit je ${STAGES_PER_RALLY} Wertungsprüfungen gegen ${7} Gegner. Zwischen den Prüfungen hast du ${SERVICE_MINUTES} Minuten Service für Reparaturen.</p>
+    <p class="sub">${RALLIES.length} Rallyes mit je ${STAGES_PER_RALLY} Wertungsprüfungen gegen ${7} Gegner. Repariert wird nur nach jeder Rallye: ${SERVICE_MINUTES} Minuten Service. Zwischen den Prüfungen fährst du mit dem Schaden weiter.</p>
     <div class="rally-list">${RALLIES.map((r) => `<span>${r.icon} ${esc(r.name)}</span>`).join('')}</div>
     ${cont}
     <div class="label">Auto für eine neue Meisterschaft</div>
@@ -104,7 +104,7 @@ export function champIntroScreen(champ, carName, envName, stageKm) {
   <p class="sub">Wertungsprüfung ${champ.stage + 1} von ${STAGES_PER_RALLY} · ${esc(envName)} · ${stageKm} km · ${esc(carName)}</p>
   ${champ.stage > 0 ? standingsTable(rallyStandings(champ, champ.rally), 'Zwischenstand Rallye', true) : ''}
   ${hurt ? `<div class="label">Zustand des Autos</div>${damageBars(d)}` : ''}
-  <p class="small">R = Bergung zurück auf die Strecke (+5 s Strafe). Kein Neustart in der Meisterschaft.</p>
+  <p class="small">${champ.stage > 0 ? 'Kein Service bis zum Ende der Rallye. ' : ''}R = Bergung zurück auf die Strecke (+5 s Strafe). Kein Neustart in der Meisterschaft.</p>
   <button class="btn primary" id="c-go">Etappe starten <span class="small">(Enter)</span></button>
   <button class="btn ghost" id="c-menu">Hauptmenü</button>`;
 }
@@ -130,7 +130,7 @@ export function champResultScreen(champ, rally, stage, rallyDone, penalty) {
     <div class="two-col"><div>${standingsTable(sr, 'Wertungsprüfung', true)}</div>
     <div>${standingsTable(rallyStandings(champ, rally), rallyDone ? 'Endstand Rallye' : 'Gesamt Rallye', true)}</div></div>`;
   if (rallyDone) html += pointsTable(championshipStandings(champ));
-  const next = champ.finished ? 'Endergebnis' : rallyDone ? 'Nächste Rallye' : 'Zum Service';
+  const next = champ.finished ? 'Endergebnis' : rallyDone ? 'Zum Service' : 'Nächste Prüfung';
   html += `<button class="btn primary" id="r-next">${next} <span class="small">(Enter)</span></button>`;
   return { html, pos };
 }
@@ -142,11 +142,11 @@ export function serviceScreen(champ) {
     ? `<label class="svc-row"><input type="checkbox" data-part="${id}" checked /> ${label} <span>${Math.round(d[id] * 100)}% · ${cost[id]} min</span></label>`
     : `<div class="svc-row ok">${label} <span>in Ordnung</span></div>`;
   return `<div class="champ-head">🔧 Service</div>
-    <p class="sub">${SERVICE_MINUTES} Minuten Zeit. Was nicht repariert wird, bleibt für die nächste Prüfung.</p>
+    <p class="sub">Rallye beendet – ${SERVICE_MINUTES} Minuten Zeit vor der nächsten Rallye. Was nicht repariert wird, bleibt.</p>
     ${damageBars(d)}
     <div class="svc">${part('engine', 'Motor')}${part('suspension', 'Fahrwerk')}${part('body', 'Karosserie')}</div>
     <p id="svc-budget"></p>
-    <button class="btn primary" id="s-go">Zur nächsten Prüfung <span class="small">(Enter)</span></button>`;
+    <button class="btn primary" id="s-go">Zur nächsten Rallye <span class="small">(Enter)</span></button>`;
 }
 
 export function finalScreen(champ) {

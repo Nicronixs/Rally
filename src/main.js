@@ -206,8 +206,8 @@ async function main() {
     showOverlay(html);
     const next = () => {
       if (CHAMP.finished) go('?champ=1');
-      else if (rallyDone) go('?champ=1');
-      else showService();
+      else if (rallyDone) go('?champ=1'); // service only between rallies (shown on load, see serviceDue)
+      else go('?champ=1'); // next stage of the same rally, with the damage
     };
     $('r-next').onclick = next;
     enterAction = next;
@@ -233,8 +233,9 @@ async function main() {
     const goOn = () => {
       if (!update()) return;
       boxes.forEach((b) => { if (b.checked) CHAMP.damage[b.dataset.part] = 0; });
+      CHAMP.serviceDue = false;
       saveChampionship(CHAMP);
-      go('?champ=1&go=1');
+      go('?champ=1');
     };
     $('s-go').onclick = goOn;
     enterAction = goOn;
@@ -470,7 +471,8 @@ async function main() {
       $('f-new').onclick = () => go('');
       enterAction = () => go('');
     } else if (MODE === 'champ') {
-      if (params.has('go')) { hideOverlay(); restart(); } else showChampIntro();
+      if (CHAMP.serviceDue) showService();
+      else if (params.has('go')) { hideOverlay(); restart(); } else showChampIntro();
     } else if (params.has('go') || AUTOPILOT) {
       hideOverlay();
       restart();

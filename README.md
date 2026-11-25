@@ -17,7 +17,7 @@ Direkt per Adresse: `?seed=123&env=snow&car=bison&go=1` (Strecke, Untergrund `fo
 
 ## Meisterschaft
 
-4 Rallyes (Nordwald/Schotter, Schneeland/Schnee, Alpenpass/Asphalt, Sandmeer/Wüste) mit je 3 Wertungsprüfungen gegen 7 fiktive Gegner. Nach jeder Rallye gibt es Punkte (25-18-15-12-10-8-6-4-2-1). Zwischen den Prüfungen einer Rallye hat man 30 Minuten Service, um Motor, Fahrwerk und Karosserie zu reparieren – was nicht repariert wird, bleibt. Jede Rallye beginnt mit einem frischen Auto. Kein Neustart; R (Bergung) kostet 5 s. Der Fortschritt wird im Browser gespeichert.
+4 Rallyes (Nordwald/Schotter, Schneeland/Schnee, Alpenpass/Asphalt, Sandmeer/Wüste) mit je 3 Wertungsprüfungen gegen 7 fiktive Gegner. Nach jeder Rallye gibt es Punkte (25-18-15-12-10-8-6-4-2-1). Repariert wird nur zwischen den Rallyes: nach der letzten Prüfung einer Rallye gibt es 45 Minuten Service für Motor, Fahrwerk und Karosserie – was nicht repariert wird, bleibt. Zwischen den Prüfungen einer Rallye fährt man mit dem Schaden weiter. Kein Neustart; R (Bergung) kostet 5 s. Der Fortschritt wird im Browser gespeichert.
 
 **Schaden:** Harte Treffer (Bäume, Felsen, Überschläge) beschädigen das Auto. Frontal trifft vor allem den Motor (weniger Leistung, ab 45 % raucht er), seitlich das Fahrwerk (weniger Grip, zieht zur Seite), alles die Karosserie (dreckig, Heckflügel fällt ab).
 

@@ -9,7 +9,7 @@ export const RALLIES = [
 ];
 export const STAGES_PER_RALLY = 3;
 export const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
-export const SERVICE_MINUTES = 30;
+export const SERVICE_MINUTES = 45; // service only between rallies
 export const RESET_PENALTY = 5; // seconds for "R" (recovery) in the championship
 
 // Fictional rivals; skill is a factor on the reference time (lower = faster).
@@ -131,7 +131,7 @@ export function recordStage(c, time, ref, damage) {
       c.points[row.name] = (c.points[row.name] || 0) + (POINTS[pos] || 0);
     });
     if (rally + 1 >= RALLIES.length) c.finished = true;
-    else { c.rally = rally + 1; c.stage = 0; c.damage = { engine: 0, suspension: 0, body: 0 }; } // fresh car for a new rally
+    else { c.rally = rally + 1; c.stage = 0; c.serviceDue = true; } // damage stays until the service before the next rally
   } else {
     c.stage += 1;
   }
