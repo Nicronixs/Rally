@@ -138,6 +138,11 @@ Auch Schotter und Unfälle kommen von ElevenLabs Sound Effects:
 - Beim Rutschen und Durchdrehen spielt derselbe Loop schneller und heller gefiltert, je nach Radschlupf. Ein eigens erzeugter Rutsch-Loop hatte Lücken.
 - `crash_light.mp3` und `crash_heavy.mp3`: Je nach Wucht des Aufpralls spielt der leichte oder der schwere Treffer, mit leicht zufälliger Tonhöhe.
 
+Gangschaltung (ebenfalls ElevenLabs):
+- `shift_up.mp3` und `shift_down.mp3`: Klacken beim Hochschalten, Klonk beim Runterschalten.
+- Während des Schaltvorgangs (0,09 s ohne Antrieb) bricht der Motorsound kurz ein.
+- `pop_a.mp3` und `pop_b.mp3`: Auspuffknallen. Es kommt bei harten Hochschaltungen über 5500 U/min und manchmal beim Gaswegnehmen bei hoher Drehzahl, höchstens einmal alle 1,5 s.
+
 Alle Geräusche werden beim Laden auf eine einheitliche Lautstärke gebracht. Stille am Anfang eines Treffers wird übersprungen.
 
 ## Texturen

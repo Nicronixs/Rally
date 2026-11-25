@@ -139,6 +139,7 @@ async function main() {
   car.setDamage(vehicle.damage);
   const dust = new Dust(scene);
   const audio = new CarAudio();
+  let lastGear = null; // for the gearbox sound
   const input = new Input();
   const padStatus = (connected) => {
     const el = $('pad-status');
@@ -1236,6 +1237,10 @@ async function main() {
     }
     const slip = Math.max(...vehicle.wheelSlip);
     audio.update(vehicle.rpm, isCo ? vehicle.throttle : drive.throttle, vehicle.speed, slip, onGravel);
+    if (lastGear !== null && vehicle.gear !== lastGear && Math.abs(vehicle.gear - lastGear) === 1 && vehicle.gear > 0 && lastGear > 0) {
+      audio.shift(vehicle.gear > lastGear, vehicle.rpm);
+    }
+    lastGear = vehicle.gear;
 
     renderer.render(scene, camera);
     requestAnimationFrame(frame);

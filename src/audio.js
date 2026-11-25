@@ -105,6 +105,37 @@ export class CarAudio {
     try {
       this.crashBufs = await Promise.all([this.loadBuffer('crash_light', 'hit'), this.loadBuffer('crash_heavy', 'hit')]);
     } catch { this.crashBufs = null; }
+    try {
+      const [up, down, popA, popB] = await Promise.all(['shift_up', 'shift_down', 'pop_a', 'pop_b'].map((n) => this.loadBuffer(n, 'hit')));
+      this.shiftBufs = { up, down, pops: [popA, popB] };
+    } catch { this.shiftBufs = null; }
+  }
+
+  playHit(buf, gain, delay = 0, rate = 1) {
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    const g = this.ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g).connect(this.master);
+    src.start(this.ctx.currentTime + delay, buf.lead);
+  }
+
+  pop(gain = 0.45, delay = 0.03) {
+    const now = this.ctx.currentTime;
+    if (now - (this.lastPop ?? -9) < 1.5) return; // not like popcorn
+    this.lastPop = now;
+    const p = this.shiftBufs.pops;
+    this.playHit(p[Math.floor(Math.random() * p.length)], gain, delay, 0.92 + Math.random() * 0.16);
+  }
+
+  // gear change: gearbox clack (up) or clunk (down), the engine drops out for the shift,
+  // and a hard upshift at high revs makes the exhaust pop
+  shift(up, rpm) {
+    if (!this.ctx || !this.shiftBufs) return;
+    this.playHit(up ? this.shiftBufs.up : this.shiftBufs.down, up ? 0.5 : 0.6, 0, 0.95 + Math.random() * 0.1);
+    this.dipUntil = this.ctx.currentTime + 0.1;
+    if (up && rpm > 5500 && Math.random() < 0.6) this.pop();
   }
 
   async loadEngine() {
@@ -151,7 +182,8 @@ export class CarAudio {
       l.src.playbackRate.setTargetAtTime(Math.min(2.2, Math.max(0.4, r / l.rpm)), t, 0.03);
     });
     this.sampleFilter.frequency.setTargetAtTime(900 + throttle * 9000 + rpm * 0.4, t, 0.06);
-    this.sampleGain.gain.setTargetAtTime(0.42 + throttle * 0.35, t, 0.05);
+    const dip = this.dipUntil && t < this.dipUntil ? 0.35 : 1; // drive cut while shifting
+    this.sampleGain.gain.setTargetAtTime((0.42 + throttle * 0.35) * dip, t, dip < 1 ? 0.015 : 0.05);
   }
 
   // short thump of filtered noise for a crash; sev 0..1
@@ -193,6 +225,9 @@ export class CarAudio {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     if (this.layers) this.updateSamples(rpm, throttle, t);
+    // lifting off the throttle at high revs: sometimes the exhaust pops
+    if (this.shiftBufs && (this.lastThrottle ?? 0) > 0.8 && throttle < 0.2 && rpm > 5000 && Math.random() < 0.35) this.pop(0.35, 0.05);
+    this.lastThrottle = throttle;
     const f = (rpm / 60) * 2; // four-cylinder firing frequency
     this.osc1.frequency.setTargetAtTime(f, t, 0.03);
     this.osc2.frequency.setTargetAtTime(f * 0.5 * 1.01, t, 0.03);
