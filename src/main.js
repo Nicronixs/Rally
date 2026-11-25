@@ -18,7 +18,7 @@ import { getCar, weeklyCar, CARS } from './cars.js';
 import {
   loadProfile, ownsCar, START_CAR, tunedOverrides, liveryColors, selectedLivery, addMoney, formatMoney,
   RALLY_PRIZES, CHAMPION_PRIZES, buyCar, buyUpgrade, buyLivery, selectLivery,
-  CAR_PRICES, UPGRADES, LIVERIES, upgradeLevel, ownsLivery, saveProfile,
+  CAR_PRICES, UPGRADES, LIVERIES, upgradeLevel, upgradePrice, ownsLivery, saveProfile,
 } from './profile.js';
 import { leaderboardReady, isoWeek, weeklyStage, fetchWeekly, submitWeekly, NAME_KEY } from './leaderboard.js';
 import {
@@ -565,7 +565,7 @@ async function main() {
         const gain = b.querySelector('.pi-gain');
         b.onclick = () => confirmBuy({
           title: `${u.name} Stufe ${level + 1} einbauen?`,
-          text: `${u.text} für den ${CARS[garageCar].name}${gain ? ` (${gain.textContent})` : ''}.`, price: u.prices[level],
+          text: `${u.text} für den ${CARS[garageCar].name}${gain ? ` (${gain.textContent})` : ''}.`, price: upgradePrice(garageCar, part, level),
           onYes: () => { if (buyUpgrade(PROFILE, garageCar, part)) bought('Eingebaut – gilt ab der nächsten Etappe.'); },
         });
       });

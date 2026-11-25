@@ -33,6 +33,15 @@ export const UPGRADES = {
   },
 };
 
+// Tuning costs more on dearer cars: factor 0.8 (start car) up to about 3 (450.000 € car).
+export const upgradeFactor = (carId) => 0.8 + (CAR_PRICES[carId] ?? 0) / 200000;
+
+// price of the given level (0-based) of a part for a car, rounded to 500 €; undefined = maxed out
+export function upgradePrice(carId, part, level) {
+  const base = UPGRADES[part].prices[level];
+  return base === undefined ? undefined : Math.round((base * upgradeFactor(carId)) / 500) * 500;
+}
+
 // Liveries: the factory one is free; the others replace paint, stripe, accent and rim colours.
 export const LIVERIES = [
   { id: 'werk', name: 'Werkslackierung', price: 0 },
@@ -87,7 +96,7 @@ export const upgradeLevel = (p, carId, part) => (p.upgrades[carId] && p.upgrades
 
 export function buyUpgrade(p, carId, part) {
   const level = upgradeLevel(p, carId, part);
-  const price = UPGRADES[part].prices[level];
+  const price = upgradePrice(carId, part, level);
   if (!ownsCar(p, carId) || price === undefined || !pay(p, price)) return false;
   p.upgrades[carId] = { ...(p.upgrades[carId] || {}), [part]: level + 1 };
   saveProfile(p);

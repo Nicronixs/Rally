@@ -52,7 +52,7 @@ Man startet mit dem **Fuchs R2** und 15.000 €. Im Menü-Reiter **Garage** kauf
 | Panther Gruppe B | Allrad | 320.000 € | S1 828 | S2 912 | 2,9 s | 225 km/h |
 | Drache Hybrid | Allrad | 450.000 € | S2 904 | S2 976 | 2,8 s | 237 km/h |
 
-- **Tuning** pro Auto in 3 Stufen: Motor (+6 % Leistung je Stufe), Bremsen (+10 %), Fahrwerk (stabiler, −15 % Schaden je Stufe), Reifen (+3 % Grip)
+- **Tuning** pro Auto in 3 Stufen: Motor (+6 % Leistung je Stufe), Bremsen (+10 %), Fahrwerk (stabiler, −15 % Schaden je Stufe), Reifen (+3 % Grip). Die Preise steigen mit dem Autopreis (Faktor 0,8 + Autopreis / 200.000): Komplett-Tuning kostet beim Fuchs 156.500 €, beim Falke 224.500 €, beim Drache 595.500 €.
 - **Lackierungen** pro Auto: Werkslackierung gratis, dazu Mitternacht, Gletscher, Feuer und Schwarz-Gold
 
 Tuning gilt in Meisterschaft und freier Fahrt. Bei der **Strecke der Woche** fahren alle mit den drei Basisautos Fuchs, Bison und Falke in Serie (alle drei verfügbar, kein Tuning), damit die Online-Rangliste fair bleibt. Im Koop sieht der Beifahrer die Lackierung des Fahrers. Preise und Wirkungen stehen in `src/profile.js`.

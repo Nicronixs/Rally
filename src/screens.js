@@ -3,7 +3,7 @@ import { CARS, carStats, WEEKLY_CARS, weeklyCar } from './cars.js';
 import { ENVIRONMENTS, getEnvironment } from './environments.js';
 import { TUNING } from './vehicle.js';
 import {
-  CAR_PRICES, UPGRADES, LIVERIES, formatMoney, ownsCar, upgradeLevel, ownsLivery, selectedLivery, liveryColors, tunedOverrides,
+  CAR_PRICES, UPGRADES, LIVERIES, formatMoney, ownsCar, upgradeLevel, upgradePrice, ownsLivery, selectedLivery, liveryColors, tunedOverrides,
 } from './profile.js';
 import { rateCar, STAT_NAMES } from './ratings.js';
 
@@ -71,7 +71,7 @@ export function garageHtml(p, carId) {
   const current = ratingFor(p, carId);
   const tuning = Object.entries(UPGRADES).map(([part, u]) => {
     const level = upgradeLevel(p, carId, part);
-    const price = u.prices[level];
+    const price = upgradePrice(carId, part, level);
     const pips = [0, 1, 2].map((i) => `<i class="${i < level ? 'on' : ''}"></i>`).join('');
     const gain = price === undefined ? 0 : ratingFor(p, carId, { [part]: level + 1 }).pi - current.pi;
     const btn = price === undefined ? '<span class="small">Maximal</span>'
