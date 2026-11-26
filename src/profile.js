@@ -2,11 +2,13 @@
 import { CARS } from './cars.js';
 
 const KEY = 'rally.profile';
+// Raising the version resets every player's profile on their next visit (2 = reset after the new car prices).
+const VERSION = 2;
 export const START_CAR = 'fuchs';
 export const START_MONEY = 15000;
 
 export const CAR_PRICES = {
-  fuchs: 0, bison: 40000, falke: 70000, luchs: 100000, wolf: 150000, adler: 220000, panther: 320000, drache: 450000,
+  fuchs: 0, bison: 50000, falke: 90000, luchs: 150000, wolf: 250000, adler: 400000, panther: 650000, drache: 1000000,
 };
 
 // Prize money by finishing position (1st … 8th)
@@ -33,8 +35,8 @@ export const UPGRADES = {
   },
 };
 
-// Tuning costs more on dearer cars: factor 0.8 (start car) up to about 3 (450.000 € car).
-export const upgradeFactor = (carId) => 0.8 + (CAR_PRICES[carId] ?? 0) / 200000;
+// Tuning costs more on dearer cars: factor 0.8 (start car) up to 3.3 (1.000.000 € car).
+export const upgradeFactor = (carId) => 0.8 + (CAR_PRICES[carId] ?? 0) / 400000;
 
 // price of the given level (0-based) of a part for a car, rounded to 500 €; undefined = maxed out
 export function upgradePrice(carId, part, level) {
@@ -52,13 +54,13 @@ export const LIVERIES = [
 ];
 
 function fresh() {
-  return { version: 1, money: START_MONEY, cars: [START_CAR], upgrades: {}, liveries: {}, earned: 0 };
+  return { version: VERSION, money: START_MONEY, cars: [START_CAR], upgrades: {}, liveries: {}, earned: 0 };
 }
 
 export function loadProfile() {
   try {
     const p = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (p && p.version === 1) return p;
+    if (p && p.version === VERSION) return p;
   } catch { /* broken save: start over */ }
   const p = fresh();
   saveProfile(p);
