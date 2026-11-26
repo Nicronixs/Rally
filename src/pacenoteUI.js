@@ -2,6 +2,7 @@
 // In the coming co-op mode this panel moves to the co-driver's device.
 import { noteText, nextText } from './pacenotes.js';
 import { CodriverVoice, noteClips, distanceClip } from './codriverVoice.js';
+import { isTouch } from './touch.js';
 
 let recorded = null; // shared across stages (loaded once)
 
@@ -51,7 +52,7 @@ export class PacenoteUI {
     recorded = recorded || new CodriverVoice();
     this.rec = recorded;
     this.role = 'solo';
-    this.visibleRows = 6;
+    this.visibleRows = isTouch() ? 3 : 6; // phones: the controls need the space
     this.distEl = document.getElementById('notebook-dist');
     this.current = 0; // first note not yet passed
     this.called = 0; // first note not yet spoken
@@ -95,7 +96,7 @@ export class PacenoteUI {
 
   applyVisibility() {
     this.panel.classList.toggle('hidden', !this.bookOn);
-    document.getElementById('voice-state').textContent = this.role !== 'solo' ? '' : this.voiceOn ? 'Ansagen an (V)' : 'Ansagen aus (V)';
+    document.getElementById('voice-state').textContent = this.role !== 'solo' ? '' : (this.voiceOn ? 'Ansagen an' : 'Ansagen aus') + (isTouch() ? '' : ' (V)');
   }
 
   toggleBook() {

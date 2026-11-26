@@ -1,4 +1,5 @@
-// Keyboard and gamepad input.
+// Keyboard, gamepad and touch input.
+import { TouchControls } from './touch.js';
 //
 // Gamepad (standard mapping, e.g. Xbox / PlayStation controllers):
 //   driving: left stick steer · RT throttle · LT brake · A handbrake · RB/LB shift up/down
@@ -16,6 +17,7 @@ export class Input {
     this.padButtonsPrev = [];
     this.navHold = { dir: null, next: 0 };
     this.pad = null;
+    this.touch = new TouchControls(this.pressed);
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
       // Ctrl is the downshift key: stop Ctrl+S (save), Ctrl+R (reload), Ctrl+D (bookmark) … while driving.
@@ -52,6 +54,13 @@ export class Input {
     const d = target - this.steerKeys;
     this.steerKeys += Math.sign(d) * Math.min(Math.abs(d), rate * dt);
     let steer = this.steerKeys;
+    const t = this.touch;
+    if (t.active) {
+      throttle = Math.max(throttle, t.throttle);
+      brake = Math.max(brake, t.brake);
+      if (t.handbrake) handbrake = true;
+      if (t.steer !== 0) steer = t.steer;
+    }
 
     const actions = new Set(this.pressed);
     this.pressed.clear();

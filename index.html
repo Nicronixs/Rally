@@ -2,7 +2,10 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0e131b" />
   <title>Rally Koop</title>
   <link rel="stylesheet" href="/src/style.css" />
 </head>
@@ -40,6 +43,7 @@
     <div id="message"></div>
     <div id="toast"></div>
     <div id="hint"></div>
+    <div id="rotate"><b>⟳</b>Handy quer halten zum Fahren</div>
   </div>
 
   <div id="overlay">
@@ -50,6 +54,7 @@
       <p class="small" id="pad-status"></p>
       <details id="help" class="hidden">
         <summary>Steuerung</summary>
+        <p class="touch-help">Handy: links auf den Bildschirm tippen und seitlich ziehen = lenken · rechts Gas, Bremse und Handbremse · oben ☰ Menü, 🎥 Kamera, ↺ zurück auf die Strecke, 📖 Aufschrieb, A/M Schaltung, 🔊 Ton. Am besten quer halten.</p>
         <table class="keys">
           <tr><td>W / ↑</td><td>Gas</td></tr>
           <tr><td>S / ↓</td><td>Bremse / Rückwärts</td></tr>

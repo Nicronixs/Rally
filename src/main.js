@@ -10,6 +10,7 @@ import { loadSurfaceTextures } from './textures.js';
 import { Dust } from './effects.js';
 import { CarAudio } from './audio.js';
 import { Input } from './input.js';
+import { isTouch } from './touch.js';
 import { buildPacenotes } from './pacenotes.js';
 import { PacenoteUI } from './pacenoteUI.js';
 import { hostRoom, joinRoom, normalizeCode, NAT_MESSAGE } from './net.js';
@@ -82,7 +83,7 @@ async function main() {
   // ---------- renderer & scene ----------
   const canvas = $('game');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch() ? 1.5 : 2)); // phones: fewer pixels, steadier frame rate
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -194,7 +195,7 @@ async function main() {
   let fullscreenHintShown = false;
   function restart() {
     placeAtIndex(stage.startIndex - 4);
-    if (game.manual && !document.fullscreenElement && !fullscreenHintShown && !AUTOPILOT) {
+    if (game.manual && !document.fullscreenElement && !fullscreenHintShown && !AUTOPILOT && !isTouch()) {
       fullscreenHintShown = true;
       setTimeout(() => toast('Tipp: F = Vollbild, dann schließt Strg+W nicht aus Versehen den Tab', 4), 300);
     }
@@ -821,6 +822,7 @@ async function main() {
   const unlockAudio = () => { audio.start(); };
   window.addEventListener('keydown', unlockAudio, { once: true });
   window.addEventListener('pointerdown', unlockAudio, { once: true });
+  window.addEventListener('touchend', unlockAudio, { once: true }); // iOS unlocks audio only on touchend
 
   if (JOIN) {
     joinGame(JOIN);
@@ -1068,9 +1070,10 @@ async function main() {
     if (!isCo && inp.actions.has('KeyG')) {
       game.manual = !game.manual;
       localStorage.setItem('rally.gearbox', game.manual ? 'manual' : 'auto');
-      toast(game.manual ? 'Schaltung: manuell (Umschalt / Strg)' : 'Schaltung: Automatik', 2);
+      toast(game.manual ? (isTouch() ? 'Schaltung: manuell (▲ / ▼)' : 'Schaltung: manuell (Umschalt / Strg)') : 'Schaltung: Automatik', 2);
     }
     vehicle.manual = game.manual && !AUTOPILOT && !isCo;
+    if (document.body.classList.contains('manual') !== vehicle.manual) document.body.classList.toggle('manual', vehicle.manual);
     const canShift = !isCo && vehicle.manual && (game.state === 'running' || game.state === 'countdown');
     if (canShift && (inp.actions.has('ShiftLeft') || inp.actions.has('ShiftRight'))) vehicle.shiftUp();
     if (canShift && (inp.actions.has('ControlLeft') || inp.actions.has('ControlRight'))) {
@@ -1086,8 +1089,9 @@ async function main() {
     else if (inp.actions.has('Enter') && (MODE === 'free' || MODE === 'weekly') && !isCo && game.state !== 'intro') restart();
     if (inp.actions.has('KeyN') && MODE === 'free' && !isCo && !overlayOpen) { go(freeQuery(Math.floor(Math.random() * 99999) + 1, ENV.id, CAR.id, true)); return; }
     // in fullscreen the browser wants Esc held to leave it, so Esc does not open the menu there
+    const menuKey = (inp.actions.has('Escape') && !document.fullscreenElement) || inp.actions.has('TouchMenu');
     if (inp.actions.has('Escape') && confirmBox) confirmBox.close();
-    else if (inp.actions.has('Escape') && !document.fullscreenElement && !isCo && game.state !== 'intro') {
+    else if (menuKey && !isCo && game.state !== 'intro') {
       if (MODE === 'champ' && (game.state === 'running' || game.state === 'countdown')) {
         if (confirm('Prüfung aufgeben? Wie bei einer echten Rallye bekommst du die Bestzeit dieser Prüfung plus 10 Minuten – die Rallye geht weiter.')) retire();
       } else go('');

@@ -25,6 +25,9 @@ export class CodriverVoice {
     this.ready = false;
     this.playing = [];
     this.load();
+    // mobile browsers start the context suspended; it may only be resumed inside a touch or click
+    const wake = () => { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); };
+    for (const ev of ['pointerdown', 'touchend', 'keydown']) window.addEventListener(ev, wake);
   }
 
   async load() {
