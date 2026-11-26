@@ -80,6 +80,32 @@ Jedes Auto hat einen **Performance-Index** von 100 bis 999 mit Klasse **D** (bis
 
 Die Werte aller Autos stehen in der Tabelle oben; `node tools/rating-calib.mjs` gibt sie neu aus. In der Garage zeigt jeder Tuning-Knopf, wie viel PI die nächste Stufe bringt. Die Bremsen-Stufen bringen 0 PI: die Autos bremsen schon stärker, als die Reifen übertragen können.
 
+## Erfolge
+
+Im Menü-Reiter **Erfolge** gibt es 36 Erfolge mit Preisgeld, zusammen 620.000 €. Beim Freischalten erscheint oben rechts ein Hinweis, das Geld kommt sofort aufs Konto. Ziele mit Zähler zeigen einen Fortschrittsbalken.
+
+| Bereich | Erfolge (Belohnung) |
+|---|---|
+| Fahren | Erste Prüfung (2.000 €), Stammfahrer 10 Prüfungen (5.000 €), Routinier 50 Prüfungen (20.000 €), Warmgefahren 25 km (5.000 €), Kilometerfresser 100 km (15.000 €), Langstrecke 500 km (40.000 €), Weltenbummler (8.000 €), Tempo 200 (5.000 €), Tempo 230 (10.000 €), Handschalter (5.000 €), Quertreiber (5.000 €), Drift-König (15.000 €), Bruchpilot (2.000 €) |
+| Meisterschaft | Saubere Fahrt (8.000 €), Fehlerlos (12.000 €), Bestzeit (10.000 €), Podium (8.000 €), Rallyesieger (20.000 €), Hattrick (25.000 €), Underdog (15.000 €), Allrounder (15.000 €), Meister (50.000 €), Königsklasse (30.000 €), Durchmarsch (75.000 €) |
+| Garage | Neues Auto (5.000 €), Feintuning (2.000 €), Neuer Look (3.000 €), Modezar (15.000 €), Voll getunt (20.000 €), S-Klasse (10.000 €), Sparschwein (10.000 €), Sammler (100.000 €) |
+| Online | In der Rangliste (5.000 €), Stammgast (15.000 €), Teamwork (10.000 €), Eingespieltes Team (20.000 €) |
+
+Wie die Erfolge zählen:
+- **Weltenbummler:** eine Prüfung auf jedem der vier Untergründe beenden, in jedem Modus.
+- **Bruchpilot:** ein Aufprall mit mindestens 50 % Wucht.
+- **Fehlerlos:** drei Meisterschaftsprüfungen hintereinander ohne Strafe. Aufgeben setzt die Serie zurück.
+- **Hattrick:** alle drei Prüfungen einer Rallye gewinnen.
+- **Durchmarsch:** alle vier Rallyes einer Meisterschaft gewinnen.
+- **Königsklasse:** die Meisterschaft mit dem Drache Hybrid gewinnen.
+- **S-Klasse:** ein eigenes Auto mit mindestens 801 PI, inklusive Tuning.
+- **Sparschwein:** 250.000 € auf dem Konto.
+- **Stammgast:** in drei verschiedenen Wochen eine Zeit eintragen.
+- **Quertreiber und Drift-König:** 2 bzw. 4 Sekunden am Stück über 40 km/h mit 12–70° Schwimmwinkel driften. Ein Dreher zählt nicht; `node tools/drift-test.mjs` zeigt die Werte.
+- **Tempo 230:** nur mit dem Drache Hybrid möglich.
+
+Fortschritt und Datum stehen im Profil (`rally.profile`). Fahrten mit `?autopilot` zählen nicht. Definitionen: `src/achievements.js`.
+
 ## Online-Rangliste: Strecke der Woche
 
 Jede Kalenderwoche (ISO-Woche, UTC) gibt es eine feste Strecke für alle – Untergrund und Strecke ergeben sich aus der Woche. Im Menü unter **Woche** sieht man die Rangliste und startet die Fahrt; man darf beliebig oft fahren, es zählt die beste Zeit pro Name (inkl. Strafen). Nach dem Ziel Namen eingeben und „Zeit eintragen“.

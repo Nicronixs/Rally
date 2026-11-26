@@ -15,6 +15,7 @@ import { PacenoteUI } from './pacenoteUI.js';
 import { hostRoom, joinRoom, normalizeCode, NAT_MESSAGE } from './net.js';
 import { getEnvironment } from './environments.js';
 import { getCar, weeklyCar, CARS } from './cars.js';
+import { unlock, addKm, rallyFinished, checkGarage, stageFinished, champStage, weeklySubmitted, checkGoals } from './achievements.js';
 import {
   loadProfile, ownsCar, START_CAR, tunedOverrides, liveryColors, selectedLivery, addMoney, formatMoney,
   RALLY_PRIZES, CHAMPION_PRIZES, buyCar, buyUpgrade, buyLivery, selectLivery,
@@ -24,7 +25,7 @@ import { leaderboardReady, isoWeek, weeklyStage, fetchWeekly, submitWeekly, NAME
 import {
   RALLIES, RESET_PENALTY, OFF_TRACK_MARGIN, CUT_MIN_GAIN, CUT_PENALTIES, CUT_REF_SPEED, JUMP_START_PENALTIES,
   RETIRE_PENALTY, OFF_RESET_TIME, OFF_RESET_PENALTY, bestRivalTime, SERVICE_MINUTES, loadChampionship, saveChampionship, newChampionship,
-  stageSeed, referenceTime, recordStage, repairCost, rallyStandings, championshipStandings,
+  stageSeed, referenceTime, recordStage, repairCost, rallyStandings, championshipStandings, stageResults,
 } from './championship.js';
 import {
   formatTime, menuScreen, champIntroScreen, champResultScreen, serviceScreen, finalScreen, barColor, garageHtml,
@@ -203,6 +204,7 @@ async function main() {
     game.penalty = 0;
     game.cuts = 0;
     game.jumped = false;
+    game.damaged = false; // for "Saubere Fahrt"
     const sp0 = vehicle.body.translation();
     game.startPos = { x: sp0.x, z: sp0.z };
     game.splits = [];
@@ -228,7 +230,38 @@ async function main() {
       addMoney(PROFILE, CHAMP.finalPrize);
       text += ` · Meisterschafts-Prämie (Platz ${fpos + 1}): +${formatMoney(CHAMP.finalPrize)}`;
     }
+    if (!AUTOPILOT) checkGoals(PROFILE); // e.g. savings goal
     return `${text} · Kontostand ${formatMoney(PROFILE.money)}`;
+  }
+
+  // Achievements after a stage. pos: place on the stage (championship), null otherwise.
+  function stageAchievements(rally, rallyDone, pos, clean, penaltyFree) {
+    if (AUTOPILOT) return; // test drives do not count
+    const coop = !!(link && link.open);
+    unlock(PROFILE, 'first_stage');
+    if (vehicle.manual) unlock(PROFILE, 'manual');
+    if (coop) unlock(PROFILE, 'coop');
+    stageFinished(PROFILE, ENV.id, coop);
+    if (MODE !== 'champ') return;
+    champStage(PROFILE, penaltyFree);
+    if (clean) unlock(PROFILE, 'clean');
+    if (pos === 1) unlock(PROFILE, 'stage_win');
+    if (rallyDone) {
+      rallyFinished(PROFILE, RALLIES[rally].id);
+      const place = rallyStandings(CHAMP, rally).findIndex((r) => r.player);
+      if (place <= 2) unlock(PROFILE, 'podium');
+      if (place === 0) {
+        unlock(PROFILE, 'rally_win');
+        if (CAR.id === 'fuchs') unlock(PROFILE, 'underdog');
+      }
+      const stageWins = [0, 1, 2].filter((s) => stageResults(CHAMP, rally, s)[0]?.player).length;
+      if (stageWins === 3) unlock(PROFILE, 'hattrick');
+      if (CHAMP.finished && championshipStandings(CHAMP).findIndex((r) => r.player) === 0) {
+        unlock(PROFILE, 'champion');
+        if (CAR.id === 'drache') unlock(PROFILE, 'dragon_champ');
+        if (RALLIES.every((_, r) => rallyStandings(CHAMP, r).findIndex((x) => x.player) === 0)) unlock(PROFILE, 'sweep');
+      }
+    }
   }
 
   // Retiring from a championship stage: like Art. 54 the stage counts with its best time + 10 minutes.
@@ -240,6 +273,7 @@ async function main() {
     const t = bestRivalTime(CHAMP, ref) + RETIRE_PENALTY;
     const { rallyDone } = recordStage(CHAMP, t, ref, vehicle.damage);
     const res = champResultScreen(CHAMP, rally, stg, rallyDone, 0, 'Aufgegeben – Bestzeit + 10 Minuten', awardPrizes(rally, rallyDone));
+    if (!AUTOPILOT) { champStage(PROFILE, false); if (rallyDone) rallyFinished(PROFILE, RALLIES[rally].id); }
     if (link) link.send({ t: 'finish', time: t, line: 'Aufgegeben – Bestzeit + 10 Minuten' });
     setTimeout(() => showChampResult(res.html, rallyDone), 1200);
   }
@@ -252,10 +286,12 @@ async function main() {
       const ref = referenceTime(stage, ENV, vehicle.T); // rivals scaled to the player's car
       const { rallyDone } = recordStage(CHAMP, t, ref, vehicle.damage);
       const res = champResultScreen(CHAMP, rally, stg, rallyDone, game.penalty, '', awardPrizes(rally, rallyDone));
+      stageAchievements(rally, rallyDone, res.pos, game.penalty === 0 && !game.damaged, game.penalty === 0);
       if (link) link.send({ t: 'finish', time: t, line: `Platz ${res.pos} auf dieser Prüfung` });
       setTimeout(() => showChampResult(res.html, rallyDone), 1800);
       return;
     }
+    stageAchievements(null, false, null, false, false);
     if (MODE === 'weekly') {
       if (link) link.send({ t: 'finish', time: t, line: 'Strecke der Woche' });
       setTimeout(() => showWeeklyResult(t), 1800);
@@ -502,6 +538,8 @@ async function main() {
       try {
         await submitWeekly({ week: WEEK.id, name: n, timeMs: t * 1000, penaltyMs: game.penalty * 1000, car: CAR.id });
         $('w-status').textContent = 'Eingetragen!';
+        unlock(PROFILE, 'weekly');
+        weeklySubmitted(PROFILE, WEEK.id);
         loadWeeklyList(n);
       } catch (e) {
         sent = false;
@@ -556,7 +594,7 @@ async function main() {
         const id = b.dataset.gBuycar;
         b.onclick = () => confirmBuy({
           title: `${CARS[id].name} kaufen?`, text: `${CARS[id].drive} · ${CARS[id].tagline}`, price: CAR_PRICES[id],
-          onYes: () => { if (buyCar(PROFILE, id)) { garageCar = id; bought('Gekauft! Das Auto steht jetzt in Meisterschaft und freier Fahrt zur Wahl.'); } },
+          onYes: () => { if (buyCar(PROFILE, id)) { garageCar = id; unlock(PROFILE, 'buy_car'); checkGarage(PROFILE, id); bought('Gekauft! Das Auto steht jetzt in Meisterschaft und freier Fahrt zur Wahl.'); } },
         });
       });
       $('garage').querySelectorAll('[data-g-up]').forEach((b) => {
@@ -566,7 +604,7 @@ async function main() {
         b.onclick = () => confirmBuy({
           title: `${u.name} Stufe ${level + 1} einbauen?`,
           text: `${u.text} für den ${CARS[garageCar].name}${gain ? ` (${gain.textContent})` : ''}.`, price: upgradePrice(garageCar, part, level),
-          onYes: () => { if (buyUpgrade(PROFILE, garageCar, part)) bought('Eingebaut – gilt ab der nächsten Etappe.'); },
+          onYes: () => { if (buyUpgrade(PROFILE, garageCar, part)) { checkGarage(PROFILE, garageCar); bought('Eingebaut – gilt ab der nächsten Etappe.'); } },
         });
       });
       $('garage').querySelectorAll('[data-g-liv]').forEach((b) => {
@@ -576,7 +614,7 @@ async function main() {
           const l = LIVERIES.find((x) => x.id === id);
           confirmBuy({
             title: `Lackierung „${l.name}" kaufen?`, text: `Für den ${CARS[garageCar].name}. Sie wird sofort ausgewählt.`, price: l.price,
-            onYes: () => { if (buyLivery(PROFILE, garageCar, id)) bought('Lackierung gekauft – zu sehen ab der nächsten Etappe.'); },
+            onYes: () => { if (buyLivery(PROFILE, garageCar, id)) { unlock(PROFILE, 'livery'); bought('Lackierung gekauft – zu sehen ab der nächsten Etappe.'); } },
           });
         };
       });
@@ -754,6 +792,8 @@ async function main() {
       notebook.sync(stage.startIndex - 4);
     });
     link.on('finish', (m) => {
+      unlock(PROFILE, 'coop');
+      stageFinished(PROFILE, ENV.id, true);
       $('message').textContent = 'ZIEL!';
       game.state = 'finished';
       showResult(m.time, m.line || '');
@@ -978,11 +1018,28 @@ async function main() {
 
   function onImpact(sev) {
     if (sev <= 0) return;
+    if (sev > 0.02 && game.state === 'running') game.damaged = true;
+    if (sev >= 0.5 && game.state === 'running' && !AUTOPILOT) unlock(PROFILE, 'wreck');
     car.setDamage(vehicle.damage);
     audio.crash(Math.min(1, sev * 2));
     input.rumble(0.4 + sev * 2, 0.7, 180 + sev * 500);
     shakeTime = Math.min(1.2, 0.4 + sev * 2);
     if (sev > 0.04) toast('Schaden!');
+  }
+
+  // per physics step while a stage is running: distance, top speed and drifts
+  let driftTime = 0;
+  function drivingAchievements() {
+    const v = Math.abs(vehicle.speed);
+    addKm(PROFILE, (v * STEP) / 1000);
+    if (v * 3.6 >= 200) unlock(PROFILE, 'speed_200');
+    if (v * 3.6 >= 230) unlock(PROFILE, 'speed_230');
+    // drift: slip angle between heading and direction of travel 12-70° (more is a spin), see tools/drift-test.mjs
+    const lv = vehicle.body.linvel(), f = vehicle.forward(), sp = Math.hypot(lv.x, lv.z);
+    const angle = sp > 3 ? (Math.acos(Math.max(-1, Math.min(1, (lv.x * f.x + lv.z * f.z) / (sp * Math.hypot(f.x, f.z))))) * 180) / Math.PI : 0;
+    driftTime = angle > 12 && angle < 70 && v * 3.6 > 40 ? driftTime + STEP : 0;
+    if (driftTime >= 2) unlock(PROFILE, 'drift');
+    if (driftTime >= 4) unlock(PROFILE, 'drift_long');
   }
 
   // ---------- main loop ----------
@@ -1058,7 +1115,7 @@ async function main() {
         });
         snapshot();
         acc -= STEP;
-        if (game.state === 'running') game.time += STEP;
+        if (game.state === 'running') { game.time += STEP; if (!AUTOPILOT) drivingAchievements(); }
         if (game.role === 'driver' && link && link.open && ++sendTick % 3 === 0) sendState();
       }
     }

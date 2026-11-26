@@ -6,6 +6,29 @@ import {
   CAR_PRICES, UPGRADES, LIVERIES, formatMoney, ownsCar, upgradeLevel, upgradePrice, ownsLivery, selectedLivery, liveryColors, tunedOverrides,
 } from './profile.js';
 import { rateCar, STAT_NAMES } from './ratings.js';
+import { ACHIEVEMENTS, isDone, progress } from './achievements.js';
+
+// ---------- achievements ----------
+function achievementsPane(p) {
+  const done = ACHIEVEMENTS.filter((a) => isDone(p, a.id));
+  const earned = done.reduce((s, a) => s + a.reward, 0);
+  const total = ACHIEVEMENTS.reduce((s, a) => s + a.reward, 0);
+  const cards = ACHIEVEMENTS.map((a) => {
+    const ok = isDone(p, a.id);
+    let bar = '';
+    if (a.goal && !ok) {
+      const v = Math.min(a.goal, progress(p, a));
+      const shown = a.stat === 'km' ? `${v.toFixed(1).replace('.', ',')} / ${a.goal} km` : `${v} / ${a.goal}`;
+      bar = `<div class="ach-bar"><i style="width:${((v / a.goal) * 100).toFixed(0)}%"></i></div><div class="small">${shown}</div>`;
+    }
+    const when = ok ? `<div class="small">✓ ${new Date(p.ach.done[a.id]).toLocaleDateString('de-AT')}</div>` : '';
+    return `<div class="ach-card${ok ? ' done' : ''}"><div class="ach-icon">${a.icon}</div>
+      <div class="ach-body"><b>${esc(a.name)}</b><div class="small">${esc(a.text)}</div>${bar}${when}</div>
+      <div class="ach-money">${ok ? '' : '+'}${formatMoney(a.reward)}</div></div>`;
+  }).join('');
+  return `<p class="sub">${done.length} von ${ACHIEVEMENTS.length} Erfolgen · ${formatMoney(earned)} von ${formatMoney(total)} verdient</p>
+    <div class="ach-list">${cards}</div>`;
+}
 
 // rating of a car with the player's tuning (profile null = stock); extra = hypothetical upgrade levels
 function ratingFor(profile, carId, extra = null) {
@@ -120,6 +143,7 @@ export function menuScreen({ champ, car, env, seed, hostCode, weekly, profile })
     <button class="tab" data-tab="free">Freie Fahrt</button>
     <button class="tab" data-tab="weekly">Woche</button>
     <button class="tab" data-tab="garage">Garage</button>
+    <button class="tab" data-tab="ach">Erfolge</button>
     <button class="tab" data-tab="coop">Koop</button>
   </div>
   <section data-pane="champ">
@@ -145,6 +169,7 @@ export function menuScreen({ champ, car, env, seed, hostCode, weekly, profile })
     ${weeklyPane(weekly, car)}
   </section>
   <section data-pane="garage" class="hidden"><div id="garage"></div></section>
+  <section data-pane="ach" class="hidden">${achievementsPane(profile)}</section>
   <section data-pane="coop" class="hidden">
     <p class="sub">Einer fährt, der andere sagt auf einem zweiten Gerät den Aufschrieb an.</p>
     <div class="menu-coop">
