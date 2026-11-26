@@ -32,6 +32,21 @@ Einstellbar in `src/championship.js` (`CUT_*`, `JUMP_START_PENALTIES`, `RETIRE_P
 
 **Gegnerzeiten** werden aus einer Referenzzeit pro Prüfung berechnet (Kurvenradien, Beschleunigung, Bremsen, Grip des Untergrunds) mal Können des Gegners plus etwas Zufall und gelegentlichen Fehlern.
 
+**Die Gegner passen sich deinem Auto an.** Die Referenzzeit gilt für einen Serien-Falke R4. Für dein Auto (inklusive Tuning) rechnet das Spiel dieselbe Prüfung mit seinen Werten nach: Spitze, Leistung, Traktion, Grip und Bremsen. Um dieses Verhältnis werden alle Gegner schneller oder langsamer. Ein besseres Auto macht die Meisterschaft also nicht leichter, es fühlt sich nur schneller an.
+
+Typische Faktoren:
+
+| Auto | Faktor | Gegner |
+|---|---|---|
+| Fuchs R2 | ≈ 1,016 | 1,6 % langsamer |
+| Falke R4 | 1,000 | unverändert |
+| Wolf GT | ≈ 0,976 | 2,4 % schneller |
+| Adler WRC | ≈ 0,959 | 4,1 % schneller |
+| Drache Hybrid | ≈ 0,917 | 8,3 % schneller |
+| Drache Hybrid voll getunt | ≈ 0,877 | 12,3 % schneller |
+
+Auf Schnee sind die Unterschiede kleiner, weil dort der Grip begrenzt und nicht die Leistung.
+
 ## Preisgeld und Garage
 
 In der Meisterschaft gibt es Preisgeld (Spielwährung, gespeichert im Browser):

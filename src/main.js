@@ -236,7 +236,7 @@ async function main() {
     game.state = 'finished';
     $('message').textContent = 'AUFGEGEBEN';
     const rally = CHAMP.rally, stg = CHAMP.stage;
-    const ref = referenceTime(stage, ENV);
+    const ref = referenceTime(stage, ENV, vehicle.T); // rivals scaled to the player's car
     const t = bestRivalTime(CHAMP, ref) + RETIRE_PENALTY;
     const { rallyDone } = recordStage(CHAMP, t, ref, vehicle.damage);
     const res = champResultScreen(CHAMP, rally, stg, rallyDone, 0, 'Aufgegeben – Bestzeit + 10 Minuten', awardPrizes(rally, rallyDone));
@@ -249,7 +249,7 @@ async function main() {
     const t = game.time + game.penalty;
     if (MODE === 'champ') {
       const rally = CHAMP.rally, stg = CHAMP.stage;
-      const ref = referenceTime(stage, ENV);
+      const ref = referenceTime(stage, ENV, vehicle.T); // rivals scaled to the player's car
       const { rallyDone } = recordStage(CHAMP, t, ref, vehicle.damage);
       const res = champResultScreen(CHAMP, rally, stg, rallyDone, game.penalty, '', awardPrizes(rally, rallyDone));
       if (link) link.send({ t: 'finish', time: t, line: `Platz ${res.pos} auf dieser Prüfung` });

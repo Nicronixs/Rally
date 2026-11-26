@@ -1,5 +1,6 @@
 // Championship: rallies, stage seeds, rival times, points and the saved progress.
 import { mulberry32 } from './noise.js';
+import { TUNING } from './vehicle.js';
 
 export const RALLIES = [
   { id: 'nordwald', name: 'Rallye Nordwald', env: 'forest', icon: '🌲' },
@@ -77,8 +78,44 @@ export function stageSeed(c, rally = c.rally, stage = c.stage) {
   return ((c.seed * 31 + rally * 1009 + stage * 97) % 99991) + 1;
 }
 
+// Stage time of a car from its physics values: corner speed from tyre grip, acceleration from
+// power, traction and drag, braking from brakes or grip, top speed from gearing or drag.
+function carStageTime(stage, env, t) {
+  const g = 9.81, road = env.grip.road;
+  const grip = (t.frontGrip + t.rearGrip) / 2;
+  const mu = 0.95 * grip * road;
+  const vTop = Math.min(((t.redline / 60) * 2 * Math.PI * t.wheelRadius) / (t.gearRatios[t.gearRatios.length - 1] * t.finalDrive), Math.cbrt(t.power / t.drag));
+  const brake = Math.min((t.brakeImpulse * 4 * 60) / t.mass, 2.1 * grip * g) * Math.min(1.2, road);
+  const a = stage.startIndex, b = stage.finishIndex, n = b - a + 1;
+  const v = new Float32Array(n);
+  for (let k = 0; k < n; k++) {
+    const kc = Math.max(Math.abs(stage.curv[a + k]), 1e-4);
+    v[k] = Math.min(vTop, Math.sqrt((mu * g) / kc));
+  }
+  v[0] = 0;
+  for (let k = 1; k < n; k++) {
+    const u = v[k - 1];
+    const drive = Math.min(t.maxDriveForce, mu * t.mass * g, t.power / Math.max(u, 1)) * 0.93;
+    const acc = Math.max(0.2, (drive - t.drag * u * u) / t.mass);
+    v[k] = Math.min(v[k], Math.sqrt(u * u + 2 * acc));
+  }
+  for (let k = n - 2; k >= 0; k--) v[k] = Math.min(v[k], Math.sqrt(v[k + 1] ** 2 + 2 * brake));
+  let time = 0;
+  for (let k = 1; k < n; k++) time += 2 / (v[k] + v[k - 1] + 0.1);
+  return time;
+}
+
+// How much faster or slower a car is on this stage than the stock Falke R4 the reference
+// time is calibrated for (0.9 = 10 % faster). Rivals are scaled by it, so a better car
+// does not make the championship easier.
+export function carPaceFactor(stage, env, t) {
+  return carStageTime(stage, env, t) / carStageTime(stage, env, TUNING);
+}
+
 // Fast estimate of a clean run: speed limited by corner radius, acceleration and braking.
-export function referenceTime(stage, env) {
+// With a car (its full tuning) the time is scaled to that car's pace.
+export function referenceTime(stage, env, car = null) {
+  if (car) return referenceTime(stage, env) * carPaceFactor(stage, env, car);
   const mu = 0.95 * env.grip.road;
   const vTop = 52, accel = 5.2, brake = 8.5 * Math.min(1.2, env.grip.road);
   const a = stage.startIndex, b = stage.finishIndex, n = b - a + 1;
